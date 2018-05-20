@@ -41,30 +41,5 @@ typedef uint8_t   byte;
 #include <deque>
 #include <set>
 
-extern "C" {
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
-}
-#include <asio.hpp>
-#include <nlohmann/json.hpp>
 
 using String = std::string;
-using Json = nlohmann::json;
-inline void echo(String msg)
-{
-	std::cout << msg << std::endl;
-}
-
-template <typename T>
-inline void SafeDelete(T * &pointer)
-{
-	if (pointer != nullptr)
-	{
-		delete pointer;
-		pointer = nullptr;
-	}
-}
-
-
-
