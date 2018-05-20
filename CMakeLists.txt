@@ -32,11 +32,18 @@ src/WAS.cpp
 src/WAS.h
 src/WDF.cpp
 src/WDF.h
+src/main.cpp
 )
 
-add_library(${PROJECT_NAME}
+add_library( ${PROJECT_NAME}lib
 ${SRC_CPP_FILES}
 )
+add_executable(${PROJECT_NAME}
+${SRC_CPP_FILES}
+)
+
+
+
 
 install (FILES ${SRC_HEADER_FILES} DESTINATION include/${PROJECT_NAME})
 install (TARGETS ${PROJECT_NAME} DESTINATION lib/)

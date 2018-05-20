@@ -1,96 +1,121 @@
 #include "WDF.h"
-// #include "WAS.h"
-
 #include <iostream>
-
-// 	#include <fstream>
-// using namespace std;
+#include <memory>
+#include <functional>
+using std::cout;
+using std::cerr;
+using std::endl;
 namespace NetEase {
 	WDF::WDF()
 	{
 		Init();
 	}
+
 	void WDF::Init()
 	{
-		mFile.open(mFilePath, ios::in | ios::binary);
-		std::cout << "InitWDF:" << mFilePath << std::endl;
-		mFileName = mFilePath.substr(mFilePath.find_last_of("/")+1);
-		if (!mFile) {
-			cout << "????????:" << endl;//path<<endl;
+		std::fstream fs(m_Path, ios::in | ios::binary);
+		if (!fs) {
+			cout << "open wdf file error!!!" << endl;
 			return;
 		}
-		mFile.read((char*)&mHeader, sizeof(Header));
-		int number = mHeader.number;
-		int offset = mHeader.offset;
+		std::cout << "InitWDF:" << m_Path << std::endl;
 
-		cout << "number:" << number << " offset:" << offset << endl;
+		m_FileName = m_Path.substr(m_Path.find_last_of("/")+1);
 
-		mIndencies = new Index[number]();
-		memset(mIndencies, 0, sizeof(Index)*number);
-		mFile.seekg(offset);
-		mFile.read((char*)mIndencies, sizeof(Index)*number);
-		mFile.close();
+		Header header;
+		fs.read((char*)&header, sizeof(Header));
 
-		for (int i = 0; i<number; i++)
+		unsigned int Flag = header.flag;
+		switch(Flag)
+		{
+			case 0x57444650: // WDFP
+				m_FileType=1;
+				std::cout << "file type : WDFP "  << std::endl;
+				break;
+			case 0x57444658: // WDFX
+				m_FileType=2;
+				std::cout << "file type : WDFX "  << std::endl;
+				break;
+			case 0x57444648: // WDFH
+				m_FileType=3;
+				std::cout << "file type : WDFH "  << std::endl;
+				break;
+			default:
+				m_FileType=0;
+		}
+		if(m_FileType == 0 )
+		{
+			cout << "open wdf m_FileType error!!!" << endl;
+			return;
+		}
+	
+
+		m_WASNumber = header.number;
+		m_FileDataOffset = header.offset;
+		cout << "number:" << m_WASNumber << " offset:" << m_FileDataOffset << endl;
+
+		mIndencies.clear();
+		mIndencies.resize(m_WASNumber);
+		fs.seekg(m_FileDataOffset);
+		fs.read((char*)&mIndencies[0], sizeof(Index)*m_WASNumber);
+		fs.close();
+
+		for (int i = 0; i<m_WASNumber; i++)
 		{
 			mIdToPos[mIndencies[i].hash] = i;
 		}
 
-		cout << "WDF file load ok!" << endl;
+		cout << "WDF file header load ok!" << endl;
 	}
 
 	WDF::~WDF()
 	{
-	//	mFile.close();
+	
 	}
 
-	/**
-	????Sprite2
-	*/
 	WAS WDF::GetWAS(uint32_t id)
 	{
 		Index index = mIndencies[mIdToPos[id]];
-		return WAS(mFilePath, index.offset, index.size);
+		return WAS(m_Path, index.offset, index.size);
 	}
-
 
 	std::shared_ptr<Sprite2> WDF::LoadSprite(uint32_t id)
 	{
-		std::ifstream file(mFilePath, ios::in | ios::binary);
-		//file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+		if(mIdToPos.count(id) == 0) return nullptr;
+		
+		std::ifstream file(m_Path, ios::in | ios::binary);
 		if(!file)
 		{
+			cout << "file read error!!! WDF::LoadSprite" << endl;
 			return nullptr;
 		}
 		
-		WAS::Header header;
-        memset(&header,0,sizeof(WAS::Header));
-		auto sprite = std::make_shared<Sprite2>();
-
 		Index index = mIndencies[mIdToPos[id]];
 		uint32_t wasOffset = index.offset;
 		uint32_t wasSize = index.size;
-		// file.seekg(wasOffset,ios::beg);
-		// char* outfilec=new char[wasSize];
-		// file.read(outfilec,wasSize);
-		// fstream of("a.was",ios::binary|ios::out);
-		// of.write(outfilec,wasSize);
-		// of.close();
-
-		uint8_t* _was_data = new uint8_t[wasSize];
-		file.seekg(wasOffset, ios::beg);
-		file.read((char*)_was_data, wasSize);
-		file.close();
-
-#define MEM_READ_WITH_OFF(off,dst,src,len) do{   memcpy((char*)dst,(src+off),len);off+=len;   }while(0)
 		
-		int _was_pos = 0;
-		MEM_READ_WITH_OFF(_was_pos,&header,_was_data,sizeof(header));
+		// unique_ptr<uint8_t[],std::function<void(uint8_t*p)>> wasMemData(new uint8_t[wasSize],[](uint8_t*p){
+		// 	std::cout << "destory" << endl;
+		// 	delete[] p;
+		// });
+		unique_ptr<uint8_t[]> wasMemData(new uint8_t[wasSize]);
+ 	//	uint8_t* wasMemData = new uint8_t[wasSize];
+		file.seekg(wasOffset, ios::beg);
+		file.read((char*)wasMemData.get(), wasSize);
+		file.close();
+		cout << "was file read ok!!!" << endl;
 
-		// file.read((char*)&header, sizeof(header));
+		uint32_t wasReadOff = 0;
+#define MEM_READ_WITH_OFF(off,dst,src,len) if(off+len < wasSize){  memcpy((char*)dst,(src.get()+off),len);off+=len;   }
+		
+	
+		WAS::Header header{};
+		MEM_READ_WITH_OFF(wasReadOff,&header,wasMemData,sizeof(header));
+
+		auto sprite = std::make_shared<Sprite2>();
 
 		sprite->mID = std::to_string(id);
-		sprite->mPath = mFileName+"/"+sprite->mID;
+		sprite->mPath = m_FileName+"/"+sprite->mID;
 		sprite->mGroupSize = header.group;
 		sprite->mFrameSize = header.frame;
 		sprite->mWidth = header.width;
@@ -130,13 +155,13 @@ namespace NetEase {
 			int AddonHeadLen = header.len - 12;
 			uint8_t* m_AddonHead = new uint8_t[AddonHeadLen]; // ???��??????????
 			
-			MEM_READ_WITH_OFF(_was_pos,m_AddonHead,_was_data,AddonHeadLen);
+			MEM_READ_WITH_OFF(wasReadOff,m_AddonHead,wasMemData,AddonHeadLen);
 			// file.read((char*)m_AddonHead, AddonHeadLen); // ???????????
 		}
 
 
 		// ????????????
-		MEM_READ_WITH_OFF(_was_pos,&palette16[0],_was_data,256 * 2);
+		MEM_READ_WITH_OFF(wasReadOff,&palette16[0],wasMemData,256 * 2);
 		// file.read((char*)&palette16[0], 256 * 2); // Palette[0]?????
 
 		for (int k = 0; k < 256; k++)
@@ -148,7 +173,7 @@ namespace NetEase {
 		// std::cout <<"frameTotalSize: "<< frameTotalSize<<std::endl;
 
 		uint32_t* frameIndexes = new uint32_t[frameTotalSize];
-		MEM_READ_WITH_OFF(_was_pos,frameIndexes,_was_data,frameTotalSize * 4);
+		MEM_READ_WITH_OFF(wasReadOff,frameIndexes,wasMemData,frameTotalSize * 4);
 		// file.read((char*)frameIndexes, frameTotalSize * 4);
 
 
@@ -176,8 +201,8 @@ namespace NetEase {
 			WAS::FrameHeader tempFreamHeader;
             memset(&tempFreamHeader,0,sizeof(	WAS::FrameHeader ));
 
-			_was_pos = frameHeadOffset + frameIndexes[i];
-			MEM_READ_WITH_OFF(_was_pos,&tempFreamHeader,_was_data,sizeof(WAS::FrameHeader));
+			wasReadOff = frameHeadOffset + frameIndexes[i];
+			MEM_READ_WITH_OFF(wasReadOff,&tempFreamHeader,wasMemData,sizeof(WAS::FrameHeader));
 
 			// file.read((char*)&tempFreamHeader, sizeof(WAS::FrameHeader));
 
@@ -202,7 +227,7 @@ namespace NetEase {
 
 
 			// ??????????????
-			MEM_READ_WITH_OFF(_was_pos,frameLine,_was_data,tempFreamHeader.height * 4);
+			MEM_READ_WITH_OFF(wasReadOff,frameLine,wasMemData,tempFreamHeader.height * 4);
 
 			// file.read((char*)frameLine, tempFreamHeader.height * 4);
 
@@ -230,8 +255,8 @@ namespace NetEase {
 				// memset(lineData, 0, frame.width);
 				
                 int lineDataPos = frameIndexes[i] + frameHeadOffset + frameLine[j];
-				lineData = &_was_data[lineDataPos];
-				// MEM_READ_WITH_OFF(_was_pos,lineData,_was_data,lineDataLen);
+				lineData = &wasMemData[lineDataPos];
+				// MEM_READ_WITH_OFF(wasReadOff,lineData,wasMemData,lineDataLen);
 
  				// file.seekg(seekpos, ios::beg);
 				// file.read((char*)lineData, lineDataLen);
@@ -283,7 +308,7 @@ namespace NetEase {
 		Index index = mIndencies[mIdToPos[id]];
 		uint32_t wasOffset = index.offset;
 		uint32_t wasSize = index.size;
-        std::fstream file(mFilePath, ios::in | ios::binary);
+        std::fstream file(m_Path, ios::in | ios::binary);
 
 		file.seekg(wasOffset,ios::beg);
 		char* outfilec=new char[wasSize];
@@ -295,7 +320,7 @@ namespace NetEase {
 	std::vector<std::shared_ptr<Sprite2>> WDF::LoadAllSprite()
 	{
 		std::vector<std::shared_ptr<Sprite2>> v;
-		for (int i = 0; i<mHeader.number; i++)
+		for (int i = 0; i<m_WASNumber; i++)
 		{
 			
 			auto p = LoadSprite(mIndencies[i].hash);

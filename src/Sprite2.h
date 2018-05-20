@@ -46,12 +46,12 @@ public:
 		bool IsBlank;
 	};
 
-	int mGroupSize;		//������
-	int mFrameSize;		//֡��
-	int mWidth;			//���
-	int mHeight;		//�߶�
-	int mKeyX;			//�ؼ�֡X
-	int mKeyY;			//�ؼ�֡Y
+	int mGroupSize;	
+	int mFrameSize;	
+	int mWidth;		
+	int mHeight;	
+	int mKeyX;		
+	int mKeyY;		
     std::string mID;
 	std::string mPath;
 	Sequence** mFrames;
