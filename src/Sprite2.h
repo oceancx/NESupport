@@ -42,7 +42,7 @@ struct Sprite2
 		int height;
 		uint32_t format;
 
-		uint32_t* src;
+		std::vector<uint32_t> src;
 		bool IsBlank;
 	};
 

@@ -12,7 +12,7 @@ using std::unique_ptr;
 
 namespace NetEase {
 
-#define MEM_READ_WITH_OFF(off,dst,src,len) do{  memcpy((uint8_t*)dst,(uint8_t*)(src+off),len);off+=len;   }while(0)
+#define MEM_READ_WITH_OFF(off,dst,src,len) if(off+len<=src.size()){  memcpy((uint8_t*)dst,(uint8_t*)(src.data()+off),len);off+=len;   }
 
 
 
@@ -33,10 +33,10 @@ namespace NetEase {
 		m_FileSize = fs.tellg();
 		fs.seekg(0, std::ios::end);
 		m_FileSize = fs.tellg() - m_FileSize;
-		m_FileData = new uint8_t[m_FileSize];
 		
+		m_FileData.resize(m_FileSize);
 		fs.seekg(0, std::ios::beg);
-		fs.read((char*)m_FileData, m_FileSize);
+		fs.read((char*)m_FileData.data(), m_FileSize);
 		fs.close();
 
 
@@ -94,11 +94,12 @@ namespace NetEase {
 		}
 		m_Sprites.clear();
 
-		if (m_FileData)
+		
+		/*if (m_FileData)
 		{
 			delete m_FileData;
 			m_FileData = nullptr;
-		}
+		}*/
 	}
 
 	WAS WDF::GetWAS(uint32_t id)
@@ -117,7 +118,7 @@ namespace NetEase {
 		uint32_t wasOffset = index.offset;
 		uint32_t wasSize = index.size;
 		
-		uint8_t* wasMemData = m_FileData;
+		auto& wasMemData = m_FileData;
 	
 		uint32_t wasReadOff = wasOffset;		
 	
@@ -194,21 +195,19 @@ namespace NetEase {
 			frame.width = wasFrameHeader.width;
 			frame.height = wasFrameHeader.height;
 			uint32_t pixels = frame.width*frame.height;
-			frame.src = new uint32_t[pixels];
-			memset((char*)frame.src, 0, pixels * 4);
-			
-
+			frame.src.resize(pixels, 0);
+		
 		
 			std::vector<uint32_t> frameLine(frame.height, 0);
 			MEM_READ_WITH_OFF(wasReadOff,frameLine.data(),wasMemData, frame.height * 4);
 
-			uint32_t* pBmpStart = frame.src;
+			uint32_t* pBmpStart = frame.src.data();
 			bool copyLine = true;	
 			for (int j = 0; j< frame.height; j++)
 			{
 				uint32_t lineDataPos = wasOffset + frameIndexes[i] + frameHeadOffset + frameLine[j];
-				uint8_t* lineData = m_FileData + lineDataPos;
-				pBmpStart = frame.src + frame.width*(j);
+				uint8_t* lineData = m_FileData.data() + lineDataPos;
+				pBmpStart = frame.src.data() + frame.width*(j);
 				int pixelLen = frame.width;
 				DataHandler((char*)lineData, pBmpStart, 0, pixelLen,j,copyLine);
 			}

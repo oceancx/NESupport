@@ -62,7 +62,7 @@ namespace NetEase {
 		std::vector<uint32_t> GetAllWASIDs()
 		{
 			std::vector<uint32_t> ids;
-			for(uint32_t i=0;i<m_WASNumber;i++)
+			for(uint32_t i=0;i<mIndencies.size();i++)
 			{
 				ids.push_back(mIndencies[i].hash);
 			}
@@ -89,7 +89,7 @@ namespace NetEase {
 		uint32_t m_WASNumber;
 		uint32_t m_FileType;
 
-		uint8_t* m_FileData;
+		std::vector<uint8_t> m_FileData;
 		std::streamsize m_FileSize;
 
 		std::map<uint32_t,Sprite2*> m_Sprites;
