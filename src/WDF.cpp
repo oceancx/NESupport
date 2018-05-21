@@ -30,9 +30,9 @@ namespace NetEase {
 		}
 		std::cout << "InitWDF:" << m_Path << std::endl;
 
-		m_FileSize = fs.tellg();
+		auto fpos = fs.tellg();
 		fs.seekg(0, std::ios::end);
-		m_FileSize = fs.tellg() - m_FileSize;
+		m_FileSize = fs.tellg() - fpos;
 		
 		m_FileData.resize(m_FileSize);
 		fs.seekg(0, std::ios::beg);

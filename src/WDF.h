@@ -90,7 +90,7 @@ namespace NetEase {
 		uint32_t m_FileType;
 
 		std::vector<uint8_t> m_FileData;
-		std::streamsize m_FileSize;
+		std::uint64_t m_FileSize;
 
 		std::map<uint32_t,Sprite2*> m_Sprites;
 		std::vector<WASFileBlock> m_WASFileBlocks;
