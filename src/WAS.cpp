@@ -1,6 +1,5 @@
 #include "WAS.h"
 #include <iostream>
-// #include <Sprite2.h>
  using namespace std;
 WAS::WAS(string filename, int offset, int size)
 {
@@ -81,13 +80,7 @@ uint8_t WAS::MixAlpha(uint8_t color, uint8_t alpha)
 	return res>0xff ? 0xff : res;
 }
 
-/*
-¼ÓÔØ¾«Áé£¬µ÷É«°å
-*/
-// Sprite2 WAS::LoadSprite(int dir)
-// {
 
-// }
 
 uint32_t WAS::RGB565to888(uint16_t color, uint8_t alpha)
 {
@@ -108,12 +101,12 @@ uint32_t WAS::RGB565to888(uint16_t color, uint8_t alpha)
 
 
 
-// 16bit 565Type Alpha »ìºÏ
+// 16bit 565Type Alpha ï¿½ï¿½ï¿½
 uint16_t WAS::Alpha565(uint16_t Src, uint16_t Des, uint8_t Alpha)
 {
 	uint16_t Result;
-	// »ìºÏºóµÄÑÕÉ«=( ( A-B ) * Alpha ) >> 5 + B
-	// »ìºÏºóµÄÑÕÉ« = ( A * Alpha + B * ( 32-Alpha ) ) / 32
+	// ï¿½ï¿½Ïºï¿½ï¿½ï¿½ï¿½É«=( ( A-B ) * Alpha ) >> 5 + B
+	// ï¿½ï¿½Ïºï¿½ï¿½ï¿½ï¿½É« = ( A * Alpha + B * ( 32-Alpha ) ) / 32
 
 	unsigned short R_Src, G_Src, B_Src;
 	R_Src = G_Src = B_Src = 0;

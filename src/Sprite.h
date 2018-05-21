@@ -1,11 +1,8 @@
-#ifndef SPRITE2_H
-#define SPRITE2_H 
+#pragma once
 #include <stdint.h>
 #include <vector>
 #include <string>
-/*
 
-*/
 #ifndef TGA_FILE_HEADER_H
 #define TGA_FILE_HEADER_H
 #pragma pack(push)
@@ -28,11 +25,11 @@ struct TGA_FILE_HEADER
 #pragma pack(pop)
 #endif
 
-struct Sprite2
+struct Sprite
 {
 
-	Sprite2();
-	~Sprite2();	
+	Sprite();
+	~Sprite();	
 
 	struct Sequence
 	{
@@ -59,4 +56,3 @@ struct Sprite2
 	bool Error;
 	void SaveImage(int index);
 };
-#endif

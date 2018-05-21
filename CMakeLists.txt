@@ -15,7 +15,7 @@ add_definitions(
 
 set(SRC_HEADER_FILES 
 src/MAP.h
-src/Sprite2.h
+src/Sprite.h
 src/WAS.h
 src/WDF.h
 )
@@ -23,8 +23,8 @@ src/WDF.h
 set(SRC_CPP_FILES 
 src/MAP.cpp
 src/MAP.h
-src/Sprite2.cpp
-src/Sprite2.h
+src/Sprite.cpp
+src/Sprite.h
 src/WAS.cpp
 src/WAS.h
 src/WDF.cpp

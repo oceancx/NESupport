@@ -1,19 +1,16 @@
-#include "Sprite2.h"
+#include "Sprite.h"
 #include <memory.h>
 #include <fstream>
 #include <iostream>
 #include "WAS.h"
-using namespace std;
 
-
-
-Sprite2::Sprite2()
+Sprite::Sprite()
 :Error(false)
 {
 
 }
 
-Sprite2::~Sprite2()
+Sprite::~Sprite()
 {
 	/*for (auto& f : mFrames)
 	{
@@ -23,11 +20,11 @@ Sprite2::~Sprite2()
 			f.src = nullptr;
 		}
 	}*/
-	mFrames.clear();
+//	mFrames.clear();
 }
 
 
-void Sprite2::SaveImage(int index)
+void Sprite::SaveImage(int index)
 {
 	TGA_FILE_HEADER TgaHeader;
 	memset(&TgaHeader, 0, 18);
@@ -50,8 +47,8 @@ void Sprite2::SaveImage(int index)
 	sprintf(outfilename, "mhxy%d_%d.tga", gpos, cpos);
 	printf("%s\n", outfilename);
 	
-	ofstream ofile;
-	ofile.open(outfilename, ios::out | ios::trunc | ios::binary);
+	std::ofstream ofile(outfilename,std::ios::out | std::ios::trunc | std::ios::binary);
+	if(!ofile)return;
 	//cout << "写TGA图像文件头" << endl;
 	ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER)); // 写TGA的文件头
 	//char* data = (char*)mFrames[gpos][cpos].src;													   //cout << "图像文件头写完成，开始写图像数据。" << endl;
@@ -60,6 +57,6 @@ void Sprite2::SaveImage(int index)
 	//	ofile.write((char*)&data[(mHeight -1- i)*mWidth*4], mWidth * 4);
 	//}
 	ofile.write((char*)mFrames[index].src.data(), mWidth*mHeight * 4);
-	cout << "完成 " << outfilename << " 帧图片输出~" << endl;
+	std::cout << "完成 " << outfilename << " 帧图片输出~" << std::endl;
 	ofile.close();
 }

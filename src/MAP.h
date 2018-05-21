@@ -5,7 +5,7 @@
 #include <string>
 #include <fstream>
 #include <vector>
-#include "Sprite2.h"
+#include "Sprite.h"
 
 using std::string;
 using std::ifstream;

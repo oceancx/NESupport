@@ -88,11 +88,11 @@ namespace NetEase {
 
 	WDF::~WDF()
 	{
-		for (auto & it : m_Sprites)
-		{
-			delete it.second;
-		}
-		m_Sprites.clear();
+		// for (auto & it : m_Sprites)
+		// {
+		// 	delete it.second;
+		// }
+		// m_Sprites.clear();
 
 		
 		/*if (m_FileData)
@@ -108,9 +108,9 @@ namespace NetEase {
 		return WAS(m_Path, index.offset, index.size);
 	}
 
-	Sprite2* WDF::LoadSprite(uint32_t id)
+	Sprite* WDF::LoadSprite(uint32_t id)
 	{
-		if (m_Sprites.count(id) > 0) return m_Sprites[id];
+		if (m_Sprites.count(id) > 0) return &m_Sprites[id];
 
 		if(mIdToPos.count(id) == 0) return nullptr;
 			
@@ -140,22 +140,20 @@ namespace NetEase {
 		}
 
 		
-		std::unique_ptr< Sprite2>  sprite(new Sprite2());
+		Sprite&  sprite = m_Sprites[id];
 
-		sprite->mID = std::to_string(id);
-		sprite->mPath = m_FileName+"/"+sprite->mID;
-		sprite->mGroupSize = header.group;
-		sprite->mFrameSize = header.frame;
-		sprite->mWidth = header.width;
-		sprite->mHeight = header.height;
+		sprite.mID = std::to_string(id);
+		sprite.mPath = m_FileName+"/"+sprite.mID;
+		sprite.mGroupSize = header.group;
+		sprite.mFrameSize = header.frame;
+		sprite.mWidth = header.width;
+		sprite.mHeight = header.height;
+		sprite.mWidth  = std::max(0, sprite.mWidth );
+		sprite.mHeight = std::max(0, sprite.mHeight);
+		sprite.mKeyX = header.key_x;
+		sprite.mKeyY = header.key_y;
 
-		sprite->mWidth  = std::max(0, sprite->mWidth );
-		sprite->mHeight = std::max(0, sprite->mHeight);
-
-		sprite->mKeyX = header.key_x;
-		sprite->mKeyY = header.key_y;
-
-		int frameTotalSize = sprite->mGroupSize* sprite->mFrameSize;
+		int frameTotalSize = sprite.mGroupSize* sprite.mFrameSize;
 
 		std::cout <<"frameTotalSize: "<< frameTotalSize<<std::endl;
 
@@ -173,7 +171,7 @@ namespace NetEase {
 		std::vector<uint32_t> frameIndexes(frameTotalSize,0);
 		MEM_READ_WITH_OFF(wasReadOff,frameIndexes.data(),wasMemData,frameTotalSize * 4);
 
-		sprite->mFrames.resize(frameTotalSize);
+		sprite.mFrames.resize(frameTotalSize);
 		
 		uint32_t frameHeadOffset = 2 + 2 + header.len;
 
@@ -189,7 +187,7 @@ namespace NetEase {
                 return nullptr;
             }
 
-			Sprite2::Sequence& frame = sprite->mFrames[i];
+			Sprite::Sequence& frame = sprite.mFrames[i];
 			frame.key_x = wasFrameHeader.key_x;
 			frame.key_y = wasFrameHeader.key_y;
 			frame.width = wasFrameHeader.width;
@@ -236,8 +234,7 @@ namespace NetEase {
 			// std::cout << " is blank :" << frame.IsBlank <<" frame:"<< i << std::endl;	
 		}
 		
-		m_Sprites.insert(std::make_pair( id, sprite.release()));
-		return m_Sprites[id];
+		return &m_Sprites[id];
 	}
 	void WDF::SaveWAS(uint32_t id)
 	{
@@ -254,9 +251,9 @@ namespace NetEase {
 		of.write(outfilec,wasSize);
 		of.close();
 	}
-	std::vector<Sprite2 *> WDF::LoadAllSprite()
+	std::vector<Sprite *> WDF::LoadAllSprite()
 	{
-		std::vector<Sprite2*> v;
+		std::vector<Sprite*> v;
 		for (uint32_t i = 0; i < m_WASNumber; i++)
 		{
 

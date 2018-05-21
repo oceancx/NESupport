@@ -3,7 +3,7 @@
 #include <map>
 #include <fstream>
 #include "WAS.h"
-#include "Sprite2.h"
+#include "Sprite.h"
 #include <memory>
 
 using String = std::string;
@@ -57,7 +57,7 @@ namespace NetEase {
 		WAS GetWAS(uint32_t id);
 		void SaveWAS(uint32_t id);
 		
-		Sprite2*  LoadSprite(uint32_t id);
+		Sprite*  LoadSprite(uint32_t id);
 
 		std::vector<uint32_t> GetAllWASIDs()
 		{
@@ -69,7 +69,7 @@ namespace NetEase {
 			return ids;
 		}
 		
-		std::vector<Sprite2 *> LoadAllSprite();
+		std::vector<Sprite *> LoadAllSprite();
 
 		~WDF();
 
@@ -92,7 +92,7 @@ namespace NetEase {
 		std::vector<uint8_t> m_FileData;
 		std::uint64_t m_FileSize;
 
-		std::map<uint32_t,Sprite2*> m_Sprites;
+		std::map<uint32_t,Sprite> m_Sprites;
 		std::vector<WASFileBlock> m_WASFileBlocks;
 		
 	};
