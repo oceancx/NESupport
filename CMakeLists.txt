@@ -39,6 +39,6 @@ ${SRC_CPP_FILES} src/main.cpp
 )
 
 
-install (FILES ${SRC_HEADER_FILES} DESTINATION include/${PROJECT_NAME})
+install (FILES ${SRC_CPP_FILES} DESTINATION include/${PROJECT_NAME})
 install (TARGETS ${PROJECT_NAME} DESTINATION lib/)
 

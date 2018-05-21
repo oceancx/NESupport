@@ -12,7 +12,7 @@ using std::unique_ptr;
 
 namespace NetEase {
 
-#define MEM_READ_WITH_OFF(off,dst,src,len) if(off+len <= src.size()){  memcpy((uint8_t*)dst,(uint8_t*)(src.data()+off),len);off+=len;   }
+#define MEM_READ_WITH_OFF(off,dst,src,len) do{  memcpy((uint8_t*)dst,(uint8_t*)(src+off),len);off+=len;   }while(0)
 
 
 
@@ -33,9 +33,10 @@ namespace NetEase {
 		m_FileSize = fs.tellg();
 		fs.seekg(0, std::ios::end);
 		m_FileSize = fs.tellg() - m_FileSize;
-		m_FileData.resize(m_FileSize);
+		m_FileData = new uint8_t[m_FileSize];
+		
 		fs.seekg(0, std::ios::beg);
-		fs.read((char*)m_FileData.data(), m_FileSize);
+		fs.read((char*)m_FileData, m_FileSize);
 		fs.close();
 
 
@@ -92,6 +93,12 @@ namespace NetEase {
 			delete it.second;
 		}
 		m_Sprites.clear();
+
+		if (m_FileData)
+		{
+			delete m_FileData;
+			m_FileData = nullptr;
+		}
 	}
 
 	WAS WDF::GetWAS(uint32_t id)
@@ -110,8 +117,8 @@ namespace NetEase {
 		uint32_t wasOffset = index.offset;
 		uint32_t wasSize = index.size;
 		
-		auto& wasMemData = m_FileData;
-		
+		uint8_t* wasMemData = m_FileData;
+	
 		uint32_t wasReadOff = wasOffset;		
 	
 		WAS::Header header{0};
@@ -128,10 +135,11 @@ namespace NetEase {
 			int addonHeadLen = header.len - 12;
 			uint8_t* m_AddonHead = new uint8_t[addonHeadLen];
 			MEM_READ_WITH_OFF(wasReadOff, m_AddonHead, wasMemData, addonHeadLen);
+			delete[] m_AddonHead;
 		}
 
 		
-		auto sprite = unique_ptr<Sprite2>(new Sprite2());
+		std::unique_ptr< Sprite2>  sprite(new Sprite2());
 
 		sprite->mID = std::to_string(id);
 		sprite->mPath = m_FileName+"/"+sprite->mID;
@@ -165,8 +173,8 @@ namespace NetEase {
 		MEM_READ_WITH_OFF(wasReadOff,frameIndexes.data(),wasMemData,frameTotalSize * 4);
 
 		sprite->mFrames.resize(frameTotalSize);
-		uint32_t pixels = sprite->mWidth  * sprite->mHeight;
-		int frameHeadOffset = 2 + 2 + header.len;
+		
+		uint32_t frameHeadOffset = 2 + 2 + header.len;
 
 		for (int i = 0; i<frameTotalSize; i++)
 		{
@@ -185,37 +193,33 @@ namespace NetEase {
 			frame.key_y = wasFrameHeader.key_y;
 			frame.width = wasFrameHeader.width;
 			frame.height = wasFrameHeader.height;
-			frame.src.resize(pixels,0);
+			uint32_t pixels = frame.width*frame.height;
+			frame.src = new uint32_t[pixels];
+			memset((char*)frame.src, 0, pixels * 4);
 			
+
+		
 			std::vector<uint32_t> frameLine(frame.height, 0);
 			MEM_READ_WITH_OFF(wasReadOff,frameLine.data(),wasMemData, frame.height * 4);
 
-			uint32_t* pBmpStart = frame.src.data();
+			uint32_t* pBmpStart = frame.src;
 			bool copyLine = true;	
 			for (int j = 0; j< frame.height; j++)
 			{
-				pBmpStart = frame.src.data() + sprite->mWidth*(j);
-				
-                int lineDataPos = wasOffset + frameIndexes[i] + frameHeadOffset + frameLine[j];
-				uint8_t* lineData = &wasMemData[lineDataPos];
-
-				int pixelOffset = (sprite->mKeyX - frame.key_x);
-				int pixelLen = sprite->mWidth;
-				// printf("pixelOffset: %d  pixelLen: %d\n",pixelOffset,pixelLen );
-				pBmpStart += pixelOffset;
-				pBmpStart += (sprite->mKeyY - frame.key_y)*sprite->mWidth;
-
-				DataHandler((char*)lineData, pBmpStart, pixelOffset, pixelLen,j,copyLine);
+				uint32_t lineDataPos = wasOffset + frameIndexes[i] + frameHeadOffset + frameLine[j];
+				uint8_t* lineData = m_FileData + lineDataPos;
+				pBmpStart = frame.src + frame.width*(j);
+				int pixelLen = frame.width;
+				DataHandler((char*)lineData, pBmpStart, 0, pixelLen,j,copyLine);
 			}
 			
-            
 			if(copyLine)
 			{
-				for (int j = 0; j + 1< header.height; j+=2)
+				for (int j = 0; j + 1< frame.height; j+=2)
 				{
-					uint32_t* pDst = &frame.src[ (j+1)*header.width ];
-					uint32_t* pSrc = &frame.src[ j*header.width ];
-					memcpy( (uint8_t*)pDst,(uint8_t*)pSrc,header.width*4);
+					uint32_t* pDst = &frame.src[ (j+1)*frame.width ];
+					uint32_t* pSrc = &frame.src[ j*frame.width ];
+					memcpy( (uint8_t*)pDst,(uint8_t*)pSrc,frame.width*4);
 				}
 			}
 
@@ -275,7 +279,7 @@ namespace NetEase {
 		uint32_t PixelLen = pixelLen;
 		uint16_t AlphaPixel = 0;
 
-		while (*pData != 0) // {00000000} ????????��??????????????????????????
+		while (pData && *pData != 0) // {00000000} ????????��??????????????????????????
 		{
 			uint8_t style = 0;
 			uint8_t Level = 0; // Alpha????
@@ -377,7 +381,7 @@ namespace NetEase {
 				break;
 			default: // ??????????????
 				cerr << "Error!" << endl;
-				exit(EXIT_FAILURE);
+				//exit(EXIT_FAILURE);
 				break;
 			}
 		}

@@ -35,18 +35,17 @@ int main()
 {
 	
 	PROFILE_SCOPE(
-		NetEase::WDF wdf("D:\\Github\\SimpleEngine\\Data/shape.wdf");
-//	wdf.SaveWAS(0x49386FCE);
+		NetEase::WDF wdf("D:\\Github\\SimpleEngine\\Data/item.wdf");
+//	wdf.SaveWAS(61182840);
 	);
 	
 	PROFILE_SCOPE(
-		auto sp = wdf.LoadSprite(0x49386FCE);
+		auto sp = wdf.LoadSprite(61182840);
+		//auto sp = wdf.LoadSprite(0x49386FCE);
+	sp->SaveImage(0);
 	);
-
-	PROFILE_SCOPE(
-		for(int i=0;i<10;i++)
-		sp->SaveImage(i);
-	);
+	 
+	
 	//f();
 
 	system("pause");
