@@ -2,10 +2,20 @@
 #include <iostream>
 #include <memory>
 #include <functional>
+#include <algorithm>
+#include <memory>
 using std::cout;
 using std::cerr;
 using std::endl;
+using std::ios;
+using std::unique_ptr;
+
 namespace NetEase {
+
+#define MEM_READ_WITH_OFF(off,dst,src,len) if(off+len <= src.size()){  memcpy((uint8_t*)dst,(uint8_t*)(src.data()+off),len);off+=len;   }
+
+
+
 	WDF::WDF()
 	{
 		Init();
@@ -20,11 +30,20 @@ namespace NetEase {
 		}
 		std::cout << "InitWDF:" << m_Path << std::endl;
 
+		m_FileSize = fs.tellg();
+		fs.seekg(0, std::ios::end);
+		m_FileSize = fs.tellg() - m_FileSize;
+		m_FileData.resize(m_FileSize);
+		fs.seekg(0, std::ios::beg);
+		fs.read((char*)m_FileData.data(), m_FileSize);
+		fs.close();
+
+
 		m_FileName = m_Path.substr(m_Path.find_last_of("/")+1);
-
-		Header header;
-		fs.read((char*)&header, sizeof(Header));
-
+		Header header{ 0 };
+		uint32_t fileOffset = 0;
+		MEM_READ_WITH_OFF(fileOffset, &header, m_FileData, sizeof(Header));
+		
 		unsigned int Flag = header.flag;
 		switch(Flag)
 		{
@@ -54,23 +73,25 @@ namespace NetEase {
 		m_FileDataOffset = header.offset;
 		cout << "number:" << m_WASNumber << " offset:" << m_FileDataOffset << endl;
 
-		mIndencies.clear();
 		mIndencies.resize(m_WASNumber);
-		fs.seekg(m_FileDataOffset);
-		fs.read((char*)&mIndencies[0], sizeof(Index)*m_WASNumber);
-		fs.close();
+		MEM_READ_WITH_OFF(m_FileDataOffset, mIndencies.data(), m_FileData, sizeof(Index)*m_WASNumber);
 
-		for (int i = 0; i<m_WASNumber; i++)
+		for (uint32_t i = 0; i < m_WASNumber; i++)
 		{
 			mIdToPos[mIndencies[i].hash] = i;
 		}
 
+		m_Sprites.clear();
 		cout << "WDF file header load ok!" << endl;
 	}
 
 	WDF::~WDF()
 	{
-	
+		for (auto & it : m_Sprites)
+		{
+			delete it.second;
+		}
+		m_Sprites.clear();
 	}
 
 	WAS WDF::GetWAS(uint32_t id)
@@ -79,40 +100,38 @@ namespace NetEase {
 		return WAS(m_Path, index.offset, index.size);
 	}
 
-	std::shared_ptr<Sprite2> WDF::LoadSprite(uint32_t id)
+	Sprite2* WDF::LoadSprite(uint32_t id)
 	{
+		if (m_Sprites.count(id) > 0) return m_Sprites[id];
+
 		if(mIdToPos.count(id) == 0) return nullptr;
-		
-		std::ifstream file(m_Path, ios::in | ios::binary);
-		if(!file)
-		{
-			cout << "file read error!!! WDF::LoadSprite" << endl;
-			return nullptr;
-		}
-		
+			
 		Index index = mIndencies[mIdToPos[id]];
 		uint32_t wasOffset = index.offset;
 		uint32_t wasSize = index.size;
 		
-		// unique_ptr<uint8_t[],std::function<void(uint8_t*p)>> wasMemData(new uint8_t[wasSize],[](uint8_t*p){
-		// 	std::cout << "destory" << endl;
-		// 	delete[] p;
-		// });
-		unique_ptr<uint8_t[]> wasMemData(new uint8_t[wasSize]);
- 	//	uint8_t* wasMemData = new uint8_t[wasSize];
-		file.seekg(wasOffset, ios::beg);
-		file.read((char*)wasMemData.get(), wasSize);
-		file.close();
-		cout << "was file read ok!!!" << endl;
-
-		uint32_t wasReadOff = 0;
-#define MEM_READ_WITH_OFF(off,dst,src,len) if(off+len < wasSize){  memcpy((char*)dst,(src.get()+off),len);off+=len;   }
+		auto& wasMemData = m_FileData;
 		
+		uint32_t wasReadOff = wasOffset;		
 	
-		WAS::Header header{};
+		WAS::Header header{0};
 		MEM_READ_WITH_OFF(wasReadOff,&header,wasMemData,sizeof(header));
 
-		auto sprite = std::make_shared<Sprite2>();
+		if (header.flag != 0x5053)
+		{
+			cerr << "Sprite File Flag Error!" << endl;
+			return nullptr;
+		}
+
+		if (header.len != 12)
+		{
+			int addonHeadLen = header.len - 12;
+			uint8_t* m_AddonHead = new uint8_t[addonHeadLen];
+			MEM_READ_WITH_OFF(wasReadOff, m_AddonHead, wasMemData, addonHeadLen);
+		}
+
+		
+		auto sprite = unique_ptr<Sprite2>(new Sprite2());
 
 		sprite->mID = std::to_string(id);
 		sprite->mPath = m_FileName+"/"+sprite->mID;
@@ -120,147 +139,66 @@ namespace NetEase {
 		sprite->mFrameSize = header.frame;
 		sprite->mWidth = header.width;
 		sprite->mHeight = header.height;
+
+		sprite->mWidth  = std::max(0, sprite->mWidth );
+		sprite->mHeight = std::max(0, sprite->mHeight);
+
 		sprite->mKeyX = header.key_x;
 		sprite->mKeyY = header.key_y;
-		
 
-		sprite->Error =  sprite->mGroupSize >= 10000;
-		sprite->Error =  sprite->mFrameSize >= 10000;
-		sprite->Error =  sprite->mWidth >= 10000;
-		sprite->Error =  sprite->mHeight >= 10000;
-		sprite->Error =  sprite->mKeyX >= 10000;
-		sprite->Error =  sprite->mKeyY >= 10000;
-		if (header.flag != 0x5053 || sprite->Error )
-		{
-			cerr << "Sprite File Flag Error!" << endl;
-			std::shared_ptr<Sprite2> sp = std::make_shared<Sprite2>();
-			sp->Error = true;
-            return sp;
-			//exit(EXIT_FAILURE);
+		int frameTotalSize = sprite->mGroupSize* sprite->mFrameSize;
+
+		std::cout <<"frameTotalSize: "<< frameTotalSize<<std::endl;
+
+		if (frameTotalSize < 0 || frameTotalSize > 1000) {
+			cout << "frame size error!!!" << endl;
+			return nullptr;
 		}
-
-		sprite->mFrames = new Sprite2::Sequence*[header.group];
-        memset(sprite->mFrames, 0, sizeof(Sprite2::Sequence*)*header.group);
-		for (int i = 0; i < header.group; i++)
-		{
-			sprite->mFrames[i] = new Sprite2::Sequence[header.frame];
-            memset(sprite->mFrames[i], 0, sizeof(Sprite2::Sequence)*header.frame);
-		}
-		
-
-		// ?��????????????????12
-		if (header.len != 12)
-		{
-			// ???????????????
-			int AddonHeadLen = header.len - 12;
-			uint8_t* m_AddonHead = new uint8_t[AddonHeadLen]; // ???��??????????
-			
-			MEM_READ_WITH_OFF(wasReadOff,m_AddonHead,wasMemData,AddonHeadLen);
-			// file.read((char*)m_AddonHead, AddonHeadLen); // ???????????
-		}
-
-
-		// ????????????
-		MEM_READ_WITH_OFF(wasReadOff,&palette16[0],wasMemData,256 * 2);
-		// file.read((char*)&palette16[0], 256 * 2); // Palette[0]?????
-
+        
+		MEM_READ_WITH_OFF(wasReadOff,&m_Palette16[0],wasMemData,256 * 2);
 		for (int k = 0; k < 256; k++)
 		{
-			m_Palette32[k] = WAS::RGB565to888(palette16[k], 0xff); // 16to32????????
+			m_Palette32[k] = WAS::RGB565to888(m_Palette16[k], 0xff); 
 		}
+		
+		std::vector<uint32_t> frameIndexes(frameTotalSize,0);
+		MEM_READ_WITH_OFF(wasReadOff,frameIndexes.data(),wasMemData,frameTotalSize * 4);
 
-		int frameTotalSize = header.group * header.frame;
-		// std::cout <<"frameTotalSize: "<< frameTotalSize<<std::endl;
-
-		uint32_t* frameIndexes = new uint32_t[frameTotalSize];
-		MEM_READ_WITH_OFF(wasReadOff,frameIndexes,wasMemData,frameTotalSize * 4);
-		// file.read((char*)frameIndexes, frameTotalSize * 4);
-
-
-		uint32_t pixels = header.width*header.height;
-
+		sprite->mFrames.resize(frameTotalSize);
+		uint32_t pixels = sprite->mWidth  * sprite->mHeight;
 		int frameHeadOffset = 2 + 2 + header.len;
 
-		uint32_t* frameLine = new uint32_t[header.height]; // ???????????��????
-        memset(frameLine,0,4*header.height);
-		
-
-		int x = 0; // ???????
-		int z = 0; // ???????
-
-		uint8_t* lineData = nullptr; //= new uint8_t[header.width * 4]; // ?????????????
-        // memset(lineData,0,4*header.width);
 		for (int i = 0; i<frameTotalSize; i++)
-		// for (int i = frameTotalSize/2; i< frameTotalSize/2+1; i++)
 		{
-			int gpos = i / (header.frame);
-			int cpos = i % (header.frame);
+			wasReadOff = wasOffset + frameHeadOffset + frameIndexes[i];
+			WAS::FrameHeader wasFrameHeader{0};
+			MEM_READ_WITH_OFF(wasReadOff,&wasFrameHeader,wasMemData,sizeof(WAS::FrameHeader));
 
-			Sprite2::Sequence& frame = sprite->mFrames[gpos][cpos];
-
-			WAS::FrameHeader tempFreamHeader;
-            memset(&tempFreamHeader,0,sizeof(	WAS::FrameHeader ));
-
-			wasReadOff = frameHeadOffset + frameIndexes[i];
-			MEM_READ_WITH_OFF(wasReadOff,&tempFreamHeader,wasMemData,sizeof(WAS::FrameHeader));
-
-			// file.read((char*)&tempFreamHeader, sizeof(WAS::FrameHeader));
-
-            if(tempFreamHeader.height >= (1<<15) || tempFreamHeader.width >= (1 <<15) 
-            	||tempFreamHeader.height < 0  || tempFreamHeader.width < 0)
+            if(wasFrameHeader.height >= (1<<15) || wasFrameHeader.width >= (1 <<15) ||wasFrameHeader.height < 0  || wasFrameHeader.width < 0)
             {
-                std::cout <<"w:" << std::dec<< tempFreamHeader.width <<" \t h:" << tempFreamHeader.height << std::endl;
-                // std::cout <<"read file error! was id:" << std::hex<< id << std::endl;
-				std::shared_ptr<Sprite2> sp = std::make_shared<Sprite2>();
-				sp->Error = true;
-				file.close();
-                return sp;
+				std::cout << "wasFrameHeader error!!!" << std::endl;
+                return nullptr;
             }
 
-			frame.key_x = tempFreamHeader.key_x;
-			frame.key_y = tempFreamHeader.key_y;
-			frame.width = tempFreamHeader.width;
-			frame.height = tempFreamHeader.height;
-            frame.src = new uint32_t[pixels];
-			memset(frame.src, 0, pixels * 4);
+			Sprite2::Sequence& frame = sprite->mFrames[i];
+			frame.key_x = wasFrameHeader.key_x;
+			frame.key_y = wasFrameHeader.key_y;
+			frame.width = wasFrameHeader.width;
+			frame.height = wasFrameHeader.height;
+			frame.src.resize(pixels,0);
+			
+			std::vector<uint32_t> frameLine(frame.height, 0);
+			MEM_READ_WITH_OFF(wasReadOff,frameLine.data(),wasMemData, frame.height * 4);
 
-
-
-			// ??????????????
-			MEM_READ_WITH_OFF(wasReadOff,frameLine,wasMemData,tempFreamHeader.height * 4);
-
-			// file.read((char*)frameLine, tempFreamHeader.height * 4);
-
-            // std::cout <<"frame:  " << i << " width:" << frame.width << std::endl;
-			uint32_t* pBmpStart = frame.src;//=frame.src+pixels*3;
+			uint32_t* pBmpStart = frame.src.data();
 			bool copyLine = true;	
-			for (int j = 0; j< tempFreamHeader.height; j++)
+			for (int j = 0; j< frame.height; j++)
 			{
-				pBmpStart = frame.src + sprite->mWidth*(j);
-				// int lineDataLen = 0;
-				// if (j < tempFreamHeader.height - 1)
-				// {
-                // 	lineDataLen = frameLine[j + 1] - frameLine[j]; // ???????????��
-				// }
-				// else
-				// {
-				// 	if (i<frameTotalSize - 1) {
-				// 		lineDataLen = frameIndexes[i + 1] - (frameIndexes[i] + frameLine[j]);
-				// 	}
-				// 	else {
-				// 		lineDataLen = wasSize - (frameIndexes[i] + frameLine[j]);
-				// 	}
-				// }
-                // printf("lineLen:%d\n",lineDataLen);
-				// memset(lineData, 0, frame.width);
+				pBmpStart = frame.src.data() + sprite->mWidth*(j);
 				
-                int lineDataPos = frameIndexes[i] + frameHeadOffset + frameLine[j];
-				lineData = &wasMemData[lineDataPos];
-				// MEM_READ_WITH_OFF(wasReadOff,lineData,wasMemData,lineDataLen);
+                int lineDataPos = wasOffset + frameIndexes[i] + frameHeadOffset + frameLine[j];
+				uint8_t* lineData = &wasMemData[lineDataPos];
 
- 				// file.seekg(seekpos, ios::beg);
-				// file.read((char*)lineData, lineDataLen);
-				// printf("before handler:  %x\n",  sprite->mFrames[gpos][cpos].src );
 				int pixelOffset = (sprite->mKeyX - frame.key_x);
 				int pixelLen = sprite->mWidth;
 				// printf("pixelOffset: %d  pixelLen: %d\n",pixelOffset,pixelLen );
@@ -270,8 +208,7 @@ namespace NetEase {
 				DataHandler((char*)lineData, pBmpStart, pixelOffset, pixelLen,j,copyLine);
 			}
 			
-            //int psize = pBmpStart-frame.src;
-            //std::cout << " psize:" << psize << std::endl;
+            
 			if(copyLine)
 			{
 				for (int j = 0; j + 1< header.height; j+=2)
@@ -283,7 +220,7 @@ namespace NetEase {
 			}
 
 			frame.IsBlank = true;
-			for(int xx=0;xx<pixels;xx++)
+			for(uint32_t xx=0;xx<pixels;xx++)
 			{
 
 				if(frame.src[xx] !=0)
@@ -292,15 +229,12 @@ namespace NetEase {
 					frame.IsBlank = false;
 					break;
 				}
-			}
-		
-			 
-			// std::cout << " is blank :" << frame.IsBlank <<" frame:"<< i << std::endl;
-			//  sprite->SaveImage(i);
+			} 
+			// std::cout << " is blank :" << frame.IsBlank <<" frame:"<< i << std::endl;	
 		}
-		//file.close();
-		sprite->Error= false;
-		return sprite;
+		
+		m_Sprites.insert(std::make_pair( id, sprite.release()));
+		return m_Sprites[id];
 	}
 	void WDF::SaveWAS(uint32_t id)
 	{
@@ -313,18 +247,18 @@ namespace NetEase {
 		file.seekg(wasOffset,ios::beg);
 		char* outfilec=new char[wasSize];
 		file.read(outfilec,wasSize);
-		fstream of("a.was",ios::binary|ios::out);
+		std::fstream of("a.was",ios::binary|ios::out);
 		of.write(outfilec,wasSize);
 		of.close();
 	}
-	std::vector<std::shared_ptr<Sprite2>> WDF::LoadAllSprite()
+	std::vector<Sprite2 *> WDF::LoadAllSprite()
 	{
-		std::vector<std::shared_ptr<Sprite2>> v;
-		for (int i = 0; i<m_WASNumber; i++)
+		std::vector<Sprite2*> v;
+		for (uint32_t i = 0; i < m_WASNumber; i++)
 		{
-			
+
 			auto p = LoadSprite(mIndencies[i].hash);
-			if(!p->Error)
+			if (p)
 			{
 				v.push_back(p);
 			}
@@ -362,7 +296,7 @@ namespace NetEase {
 					pData++; // ????????
 					if (Pixels < PixelLen)
 					{
-						AlphaPixel = WAS::Alpha565(palette16[(uint8_t)(*pData)], 0, Level); // ???
+						AlphaPixel = WAS::Alpha565(m_Palette16[(uint8_t)(*pData)], 0, Level); // ???
 						*pBmpStart++ = WAS::RGB565to888(AlphaPixel, Level * 8);
 						Pixels++;
 						pData++;
@@ -381,7 +315,7 @@ namespace NetEase {
 					{
 						if (Pixels < PixelLen)
 						{
-							AlphaPixel = WAS::Alpha565(palette16[(uint8_t)*pData], 0, Level); // ???
+							AlphaPixel = WAS::Alpha565(m_Palette16[(uint8_t)*pData], 0, Level); // ???
 							*pBmpStart++ = WAS::RGB565to888(AlphaPixel, Level * 8);
 							Pixels++;
 						}
@@ -452,7 +386,7 @@ namespace NetEase {
 			uint32_t Repeat = 0;
 			Repeat = PixelLen - Pixels;
             // std::cout <<" pixLen : "<< pixelLen <<" line:" << y <<" repeate:" << (PixelLen - Pixels) << " copy line:"<< copyline<< std::endl;
-			for (int i = 0; i < Repeat; i++)
+			for (uint32_t i = 0; i < Repeat; i++)
 			{
 				if (Pixels < PixelLen)
 				{

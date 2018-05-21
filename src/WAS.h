@@ -1,12 +1,8 @@
-#ifndef WAS_H
-#define WAS_H 
+#pragma once
 #include <stdint.h>
 #include <string>
 #include <fstream>
 #include <memory.h>
-using namespace std;
-
-
 
 
 class WAS
@@ -35,7 +31,7 @@ public:
 
 
 	WAS(std::string filename, int offset, int size);
-	WAS(fstream &infile, int offset, int size);
+	WAS(std::fstream &infile, int offset, int size);
 	static uint32_t RGB565to888(uint16_t color, uint8_t alpha); // 565ת888
 	static uint16_t Alpha565(uint16_t src, uint16_t des, uint8_t alpha);
 	static uint8_t MixAlpha(uint8_t color, uint8_t alpha);
@@ -48,4 +44,3 @@ public:
 	uint32_t mFileSize;
 
 };
-#endif

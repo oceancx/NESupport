@@ -585,9 +585,9 @@ namespace NetEase {
 
 				memset(pOutMaskBmp, 0, sizeof(uint32_t) * pixel_num);
 
-				for (int h = 0; h<maskInfo.Height; h++)
+				for (uint32_t h = 0; h<maskInfo.Height; h++)
 				{
-					for (int w = 0; w<maskInfo.Width; w++)
+					for (uint32_t w = 0; w<maskInfo.Width; w++)
 					{
 
 						int mask_index = (h * align_width + w) * 2;		// 单位:位

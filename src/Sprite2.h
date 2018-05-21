@@ -28,12 +28,11 @@ struct TGA_FILE_HEADER
 #pragma pack(pop)
 #endif
 
-class Sprite2
+struct Sprite2
 {
 
-public:
-    Sprite2();
-	~Sprite2();
+	Sprite2();
+	~Sprite2();	
 
 	struct Sequence
 	{
@@ -42,7 +41,8 @@ public:
 		int width;
 		int height;
 		uint32_t format;
-		uint32_t* src;
+
+		std::vector<uint32_t> src;
 		bool IsBlank;
 	};
 
@@ -54,7 +54,8 @@ public:
 	int mKeyY;		
     std::string mID;
 	std::string mPath;
-	Sequence** mFrames;
+	std::vector<Sequence> mFrames;
+
 	bool Error;
 	void SaveImage(int index);
 };

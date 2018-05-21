@@ -1,7 +1,7 @@
 #include "WAS.h"
 #include <iostream>
 // #include <Sprite2.h>
-// using namespace std;
+ using namespace std;
 WAS::WAS(string filename, int offset, int size)
 {
 	mFileName = filename;

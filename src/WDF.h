@@ -6,9 +6,19 @@
 #include "Sprite2.h"
 #include <memory>
 
+using String = std::string;
 namespace NetEase {
+
+	
+
 	class WDF
 	{
+		struct WASFileBlock
+		{
+			uint8_t* data;
+			uint32_t size;
+			uint32_t offset;
+		};
 		struct Header
 		{
 			//flag 			0x57444650: // WDFP
@@ -24,11 +34,18 @@ namespace NetEase {
 
 		struct Index
 		{
-			uint32_t hash; // WAS文件的名字散列
+			uint32_t hash;	// WAS文件的名字散列
 			uint32_t offset; // WAS文件的偏移
-			uint32_t size; //  WAS文件大小
+			uint32_t size;	//  WAS文件大小
 			uint32_t spaces; // WAS文件空间
 		};
+
+		struct ImageData
+		{
+			uint8_t* data;
+			uint32_t size;
+		};
+
 
 	public:
 		WDF();
@@ -39,33 +56,44 @@ namespace NetEase {
 
 		WAS GetWAS(uint32_t id);
 		void SaveWAS(uint32_t id);
-
-		std::shared_ptr<Sprite2> LoadSprite(uint32_t id);
+		
+		Sprite2*  LoadSprite(uint32_t id);
 
 		std::vector<uint32_t> GetAllWASIDs()
 		{
 			std::vector<uint32_t> ids;
-			for(int i=0;i<m_WASNumber;i++)
+			for(uint32_t i=0;i<m_WASNumber;i++)
 			{
 				ids.push_back(mIndencies[i].hash);
 			}
 			return ids;
 		}
 		
-		std::vector<std::shared_ptr<Sprite2>> LoadAllSprite();
+		std::vector<Sprite2 *> LoadAllSprite();
 
 		~WDF();
 
 	public:
-		std::vector<Index> mIndencies;
-		map<uint32_t, uint32_t> mIdToPos;
 
-		uint16_t palette16[256];
+
+		std::vector<Index> mIndencies;
+		std::map<uint32_t, uint32_t> mIdToPos;
+
+		std::map<String, ImageData> m_ImageSet;
+
+		uint16_t m_Palette16[256];
 		std::string m_Path;
 		uint32_t m_Palette32[256];
 		std::string m_FileName;
 		uint32_t m_FileDataOffset;
 		uint32_t m_WASNumber;
 		uint32_t m_FileType;
+
+		std::vector<uint8_t> m_FileData;
+		std::streamsize m_FileSize;
+
+		std::map<uint32_t,Sprite2*> m_Sprites;
+		std::vector<WASFileBlock> m_WASFileBlocks;
+		
 	};
 }

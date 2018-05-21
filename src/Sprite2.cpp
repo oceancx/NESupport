@@ -15,7 +15,7 @@ Sprite2::Sprite2()
 
 Sprite2::~Sprite2()
 {
-
+	
 }
 
 
@@ -51,7 +51,7 @@ void Sprite2::SaveImage(int index)
 	//{
 	//	ofile.write((char*)&data[(mHeight -1- i)*mWidth*4], mWidth * 4);
 	//}
-	ofile.write((char*)mFrames[gpos][cpos].src, mWidth*mHeight * 4);
+	ofile.write((char*)mFrames[index].src.data(), mWidth*mHeight * 4);
 	cout << "完成 " << outfilename << " 帧图片输出~" << endl;
 	ofile.close();
 }

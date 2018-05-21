@@ -2,9 +2,6 @@
 cmake_minimum_required (VERSION 3.1)
 project (NESupport)
 
-SET(WORK_DIR  "${PROJECT_SOURCE_DIR}")  
-
-
 
 add_definitions(
   -std=c++11
@@ -32,17 +29,14 @@ src/WAS.cpp
 src/WAS.h
 src/WDF.cpp
 src/WDF.h
-src/main.cpp
 )
 
-add_library( ${PROJECT_NAME}lib
+add_library( ${PROJECT_NAME}
 ${SRC_CPP_FILES}
 )
-add_executable(${PROJECT_NAME}
-${SRC_CPP_FILES}
+add_executable(${PROJECT_NAME}EXE
+${SRC_CPP_FILES} src/main.cpp
 )
-
-
 
 
 install (FILES ${SRC_HEADER_FILES} DESTINATION include/${PROJECT_NAME})
