@@ -127,11 +127,11 @@ namespace NetEase {
 
 		if (header.flag != 0x5053)
 		{
-			cerr << "Sprite File Flag Error!" << endl;
+			std::cout << "Sprite File Flag Error!" << endl;
 			return nullptr;
 		}
 
-		if (header.len != 12)
+		if (header.len > 12)
 		{
 			int addonHeadLen = header.len - 12;
 			uint8_t* m_AddonHead = new uint8_t[addonHeadLen];
