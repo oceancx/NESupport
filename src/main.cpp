@@ -35,7 +35,7 @@ int main()
 {
 	
 	PROFILE_SCOPE(
-		NetEase::WDF wdf("D:\\Github\\SimpleEngine\\Data/item.wdf");
+		NE::WDF wdf("D:\\Github\\SimpleEngine\\Data/item.wdf");
 //	wdf.SaveWAS(61182840);
 	);
 	

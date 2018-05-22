@@ -1,15 +1,545 @@
-﻿#include "MAP.h"
+#include "NESupport.h"
 #include <iostream>
-#include <math.h>
-#include <memory.h>
-//#include <SOIL/SOIL.h>
-#include "WAS.h"
+#include <memory>
+#include <functional>
+#include <algorithm>
+#include <memory>
+#include <cmath>
 using std::cout;
-using std::ios;
 using std::endl;
-namespace NetEase {
+using std::ios;
 
-	MAP::MAP(string filename) :m_FileName(filename)
+#define MEM_READ_WITH_OFF(off,dst,src,len) if(off+len<=src.size()){  memcpy((uint8_t*)dst,(uint8_t*)(src.data()+off),len);off+=len;   }
+
+
+#ifndef TGA_FILE_HEADER_H
+#define TGA_FILE_HEADER_H
+#pragma pack(push)
+#pragma pack(1)
+struct TGA_FILE_HEADER
+{
+    uint8_t IdLength;
+    uint8_t ColorMapType;
+    uint8_t ImageType;
+    uint16_t ColorMapFirstIndex;
+    uint16_t ColorMapLength;
+    uint8_t ColorMapEntrySize;
+    uint16_t XOrigin;
+    uint16_t YOrigin;
+    uint16_t ImageWidth;
+    uint16_t ImageHeight;
+    uint8_t PixelDepth;
+    uint8_t ImageDescruptor;
+};
+#pragma pack(pop)
+#endif
+
+namespace NE {
+
+void Sprite::SaveImage(int index)
+{
+	TGA_FILE_HEADER TgaHeader;
+	memset(&TgaHeader, 0, 18);
+	TgaHeader.IdLength = 0;			// 图像信息字段(默认:0)
+	TgaHeader.ColorMapType = 0;		// 颜色标的类型(默认0)
+	TgaHeader.ImageType = 0x02;			// 图像类型码(支持2或10)
+	TgaHeader.ColorMapFirstIndex = 0;	// 颜色表的引索(默认:0)
+	TgaHeader.ColorMapLength = 0;		// 颜色表的长度(默认:0)
+	TgaHeader.ColorMapEntrySize = 0;	// 颜色表表项的为数(默认:0，支持16/24/32)
+	TgaHeader.XOrigin = 0;				// 图像X坐标的起始位置(默认:0)
+	TgaHeader.YOrigin = 0;				// 图像Y坐标的起始位置(默认:0)
+	TgaHeader.ImageWidth = mWidth;			// 图像的宽度
+	TgaHeader.ImageHeight = mHeight;			// 图像的高度
+	TgaHeader.PixelDepth = 32;			// 图像每像素存储占用位数
+	TgaHeader.ImageDescruptor = 8;		// 图像描述字符字节(默认:0)
+
+	char outfilename[255];
+	int gpos = index / mFrameSize;
+	int cpos = index%mFrameSize;
+	sprintf(outfilename, "mhxy%d_%d.tga", gpos, cpos);
+	printf("%s\n", outfilename);
+	
+	std::ofstream ofile(outfilename,std::ios::out | std::ios::trunc | std::ios::binary);
+	if(!ofile)return;
+	//cout << "写TGA图像文件头" << endl;
+	ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER)); // 写TGA的文件头
+	ofile.write((char*)mFrames[index].src.data(), mWidth*mHeight * 4);
+	std::cout << "完成 " << outfilename << " 帧图片输出~" << std::endl;
+	ofile.close();
+}
+
+
+
+
+uint8_t MixAlpha(uint8_t color, uint8_t alpha)
+{
+	// a*C+(1-a)*C
+	uint32_t res = color*alpha / 0xff;
+	res = 0;
+	return res>0xff ? 0xff : res;
+}
+
+uint32_t RGB565to888(uint16_t color, uint8_t alpha)
+{
+	unsigned int r = (color >> 11) & 0x1f;
+	unsigned int g = (color >> 5) & 0x3f;
+	unsigned int b = (color) & 0x1f;
+	uint32_t R, G, B, A;
+	A = alpha;
+	R = (r << 3) | (r >> 2);
+	G = (g << 2) | (g >> 4);
+	B = (b << 3) | (b >> 2);
+	return   A << 24 | (B << 16) | (G << 8) | R;
+}
+
+// 16bit 565Type Alpha 混合
+uint16_t Alpha565(uint16_t Src, uint16_t Des, uint8_t Alpha)
+{
+	uint16_t Result;
+	// 混合后的颜色=( ( A-B ) * Alpha ) >> 5 + B
+	// 混合后的颜色 = ( A * Alpha + B * ( 32-Alpha ) ) / 32
+
+	unsigned short R_Src, G_Src, B_Src;
+	R_Src = G_Src = B_Src = 0;
+
+	R_Src = Src & 0xF800;
+	G_Src = Src & 0x07E0;
+	B_Src = Src & 0x001F;
+
+	R_Src = R_Src >> 11;
+	G_Src = G_Src >> 5;
+
+	unsigned short R_Des, G_Des, B_Des;
+	R_Des = G_Des = B_Des = 0;
+
+	R_Des = Des & 0xF800;
+	G_Des = Des & 0x07E0;
+	B_Des = Des & 0x001F;
+
+	R_Des = R_Des >> 11;
+	G_Des = G_Des >> 5;
+
+	unsigned short R_Res, G_Res, B_Res;
+	R_Res = G_Res = B_Res = 0;
+
+	R_Res = (((R_Src - R_Des)*Alpha) >> 5) + R_Des;
+	G_Res = (((G_Src - G_Des)*Alpha) >> 5) + G_Des;
+	B_Res = (((B_Src - B_Des)*Alpha) >> 5) + B_Des;
+
+	R_Res = R_Res << 11;
+	G_Res = G_Res << 5;
+
+	Result = R_Res | G_Res | B_Res;
+	return Result;
+}
+
+
+WAS::WAS(std::string filename)
+:WAS(filename,0)
+{
+}
+
+WAS::WAS(std::string path, uint32_t offset)
+:mPath(path)
+{
+	std::ifstream infile(mPath, ios::binary | ios::in);
+	if(!infile) return;
+	infile.seekg(offset, ios::beg);
+	infile.read((char*)&mHeader, sizeof(mHeader));
+	if (mHeader.flag != 0x5053)
+	{
+		cout << "Sprite File Flag Error!" << endl;
+		infile.close();
+		return;
+	}
+
+	uint16_t palette16[256];
+	memset(palette16, 0, sizeof(palette16));
+	infile.read((char*)palette16, sizeof(palette16));
+
+	for (int i = 0; i<256; i++)
+	{
+		mPalette32[i] = RGB565to888(palette16[i], 0xff);
+	}
+
+	int frames = mHeader.group * mHeader.frame;
+	mFrameIndecies.resize(frames);
+	infile.read((char*)mFrameIndecies.data(), frames * 4);
+	infile.close();
+}
+
+WAS::~WAS()
+{
+
+}
+
+WDF::WDF(std::string path)
+:m_Path(path)
+{
+	std::fstream fs(m_Path, ios::in | ios::binary);
+	if (!fs) {
+		cout << "open wdf file error!!!" << endl;
+		return;
+	}
+	std::cout << "InitWDF:" << m_Path << std::endl;
+
+	auto fpos = fs.tellg();
+	fs.seekg(0, std::ios::end);
+	m_FileSize = fs.tellg() - fpos;
+	
+	m_FileData.resize(m_FileSize);
+	fs.seekg(0, std::ios::beg);
+	fs.read((char*)m_FileData.data(), m_FileSize);
+	fs.close();
+
+
+	m_FileName = m_Path.substr(m_Path.find_last_of("/")+1);
+	m_WDFDir = m_Path.substr(0,m_Path.find_last_of("/"));
+
+	Header header{ 0 };
+	uint32_t fileOffset = 0;
+	MEM_READ_WITH_OFF(fileOffset, &header, m_FileData, sizeof(Header));
+	
+	unsigned int Flag = header.flag;
+	switch(Flag)
+	{
+		case 0x57444650: // WDFP
+			m_FileType=1;
+			std::cout << "file type : WDFP "  << std::endl;
+			break;
+		case 0x57444658: // WDFX
+			m_FileType=2;
+			std::cout << "file type : WDFX "  << std::endl;
+			break;
+		case 0x57444648: // WDFH
+			m_FileType=3;
+			std::cout << "file type : WDFH "  << std::endl;
+			break;
+		default:
+			m_FileType=0;
+	}
+	if(m_FileType == 0 )
+	{
+		cout << "open wdf m_FileType error!!!" << endl;
+		return;
+	}
+
+
+	m_WASNumber = header.number;
+	m_FileDataOffset = header.offset;
+	cout << "number:" << m_WASNumber << " offset:" << m_FileDataOffset << endl;
+
+	mIndencies.resize(m_WASNumber);
+	MEM_READ_WITH_OFF(m_FileDataOffset, mIndencies.data(), m_FileData, sizeof(Index)*m_WASNumber);
+
+	for (uint32_t i = 0; i < m_WASNumber; i++)
+	{
+		mIdToPos[mIndencies[i].hash] = i;
+	}
+
+	m_Sprites.clear();
+	cout << "WDF file header load ok!" << endl;
+}
+
+
+WDF::~WDF()
+{
+
+}
+
+WAS WDF::GetWAS(uint32_t id)
+{
+	Index index = mIndencies[mIdToPos[id]];
+	return WAS(m_Path, index.offset);
+}
+
+Sprite* WDF::LoadSprite(uint32_t id)
+{
+	if (m_Sprites.count(id) > 0) return &m_Sprites[id];
+
+	if(mIdToPos.count(id) == 0) return nullptr;
+		
+	Index index = mIndencies[mIdToPos[id]];
+	
+	auto& wasMemData = m_FileData;
+
+	uint32_t wasReadOff =  index.offset;		
+
+	WAS::Header header{0};
+	MEM_READ_WITH_OFF(wasReadOff,&header,wasMemData,sizeof(header));
+
+	if (header.flag != 0x5053)
+	{
+		std::cout << "Sprite File Flag Error!" << endl;
+		return nullptr;
+	}
+
+	if (header.len > 12)
+	{
+		int addonHeadLen = header.len - 12;
+		uint8_t* m_AddonHead = new uint8_t[addonHeadLen];
+		MEM_READ_WITH_OFF(wasReadOff, m_AddonHead, wasMemData, addonHeadLen);
+		delete[] m_AddonHead;
+	}
+
+	
+	Sprite&  sprite = m_Sprites[id];
+
+	sprite.mID = std::to_string(id);
+	sprite.mPath = m_FileName+"/"+sprite.mID;
+	sprite.mGroupSize = header.group;
+	sprite.mFrameSize = header.frame;
+	sprite.mWidth = header.width;
+	sprite.mHeight = header.height;
+	sprite.mWidth  = std::max(0, sprite.mWidth );
+	sprite.mHeight = std::max(0, sprite.mHeight);
+	sprite.mKeyX = header.key_x;
+	sprite.mKeyY = header.key_y;
+
+	int frameTotalSize = sprite.mGroupSize* sprite.mFrameSize;
+
+	std::cout <<"FrameTotalSize: "<< frameTotalSize<<std::endl;
+
+	if (frameTotalSize < 0 || frameTotalSize > 1000) {
+		cout << "frame size error!!!" << endl;
+		return nullptr;
+	}
+	
+	MEM_READ_WITH_OFF(wasReadOff,&m_Palette16[0],wasMemData,256 * 2);
+	for (int k = 0; k < 256; k++)
+	{
+		m_Palette32[k] = RGB565to888(m_Palette16[k], 0xff); 
+	}
+	
+	std::vector<uint32_t> frameIndexes(frameTotalSize,0);
+	MEM_READ_WITH_OFF(wasReadOff,frameIndexes.data(),wasMemData,frameTotalSize * 4);
+
+	sprite.mFrames.resize(frameTotalSize);
+	
+	uint32_t frameHeadOffset = 2 + 2 + header.len;
+
+	for (int i = 0; i<frameTotalSize; i++)
+	{
+		wasReadOff =  index.offset + frameHeadOffset + frameIndexes[i];
+		WAS::FrameHeader wasFrameHeader{0};
+		MEM_READ_WITH_OFF(wasReadOff,&wasFrameHeader,wasMemData,sizeof(WAS::FrameHeader));
+
+		if(wasFrameHeader.height >= (1<<15) || wasFrameHeader.width >= (1 <<15) ||wasFrameHeader.height < 0  || wasFrameHeader.width < 0)
+		{
+			std::cout << "wasFrameHeader error!!!" << std::endl;
+			return nullptr;
+		}
+
+		Sprite::Sequence& frame = sprite.mFrames[i];
+		frame.key_x = wasFrameHeader.key_x;
+		frame.key_y = wasFrameHeader.key_y;
+		frame.width = wasFrameHeader.width;
+		frame.height = wasFrameHeader.height;
+		uint32_t pixels = frame.width*frame.height;
+		frame.src.resize(pixels,0);
+		
+		std::vector<uint32_t> frameLine(frame.height, 0);
+		MEM_READ_WITH_OFF(wasReadOff,frameLine.data(),wasMemData, frame.height * 4);
+		
+		uint32_t* pBmpStart = nullptr;
+		bool copyLine = true;	
+		for (int j = 0; j< frame.height; j++)
+		{
+			uint32_t lineDataPos =  index.offset + frameIndexes[i] + frameHeadOffset + frameLine[j];
+			uint8_t* lineData = m_FileData.data() + lineDataPos;
+			pBmpStart = frame.src.data() + frame.width*(j);
+			int pixelLen = frame.width;
+			DataHandler(lineData, pBmpStart, 0, pixelLen,j,copyLine);
+		}
+
+		if(copyLine)
+		{
+			for (int j = 0; j + 1< frame.height; j+=2)
+			{
+				uint32_t* pDst = &frame.src[ (j+1)*frame.width ];
+				uint32_t* pSrc = &frame.src[ j*frame.width ];
+				memcpy( (uint8_t*)pDst,(uint8_t*)pSrc,frame.width*4);
+			}
+		}
+
+		frame.IsBlank = true;
+		for(uint32_t pix=0;pix<pixels;pix++)
+		{
+			if(frame.src[pix] !=0)
+			{
+				// std::cout <<frame.src[xx] << std::endl;
+				frame.IsBlank = false;
+				break;
+			}
+		} 
+		// std::cout << " is blank :" << frame.IsBlank <<" frame:"<< i << std::endl;	
+	}
+	return &m_Sprites[id];
+}
+
+void WDF::SaveWAS(uint32_t id)
+{
+	if(!mIdToPos.count(id))return ;
+	Index index = mIndencies[mIdToPos[id]];
+	uint32_t wasOffset = index.offset;
+	uint32_t wasSize = index.size;
+	std::fstream file(m_Path, ios::in | ios::binary);
+
+	file.seekg(wasOffset,ios::beg);
+	char* outfilec = new char[wasSize];
+	file.read(outfilec,wasSize);
+	std::fstream of(m_WDFDir.append("/"+std::to_string(id)+".was"),ios::binary|ios::out);
+	of.write(outfilec,wasSize);
+	of.close();
+	delete[] outfilec;
+}
+
+std::vector<Sprite *> WDF::LoadAllSprite()
+{
+	std::vector<Sprite*> v;
+	for (uint32_t i = 0; i < m_WASNumber; i++)
+	{
+
+		auto p = LoadSprite(mIndencies[i].hash);
+		if (p)
+		{
+			v.push_back(p);
+		}
+	}
+	return v;
+}
+
+
+void WDF::DataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen,int y, bool& copyline)
+{
+	uint32_t Pixels = pixelOffset;
+	uint32_t PixelLen = pixelLen;
+	uint16_t AlphaPixel = 0;
+
+	while (pData && *pData != 0) // {00000000} 表示像素行结束，如有剩余像素用透明色代替
+	{
+		uint8_t style = 0;
+		uint8_t Level = 0; // Alpha层数
+		uint8_t Repeat = 0; // 重复次数
+		style = (*pData & 0xc0) >> 6;  // 取字节的前两个比特
+		switch (style)
+		{
+		case 0: // {00******}
+			if(copyline&&y == 1)
+			{
+				copyline = false;
+			}
+			if (*pData & 0x20) // {001*****} 表示带有Alpha通道的单个像素
+			{
+				// {001 +5bit Alpha}+{1Byte Index}, 表示带有Alpha通道的单个像素。
+				// {001 +0~31层Alpha通道}+{1~255个调色板引索}
+				Level = (*pData) & 0x1f; // 0x1f=(11111) 获得Alpha通道的值
+				pData++; // 下一个字节
+				if (Pixels < PixelLen)
+				{
+					AlphaPixel = Alpha565(m_Palette16[(uint8_t)(*pData)], 0, Level);  // 混合
+					*pBmpStart++ = RGB565to888(AlphaPixel, Level * 8);
+					Pixels++;
+					pData++;
+				}
+			}
+			else // {000*****} 表示重复n次带有Alpha通道的像素
+			{
+				// {000 +5bit Times}+{1Byte Alpha}+{1Byte Index}, 表示重复n次带有Alpha通道的像素。
+				// {000 +重复1~31次}+{0~255层Alpha通道}+{1~255个调色板引索}
+				// 注: 这里的{00000000} 保留给像素行结束使用，所以只可以重复1~31次。
+				Repeat = (*pData) & 0x1f; // 获得重复的次数
+				pData++;
+				Level = *pData; // 获得Alpha通道值
+				pData++;
+				for (int i = 1; i <= Repeat; i++)
+				{
+					if (Pixels < PixelLen)
+					{
+						AlphaPixel = Alpha565(m_Palette16[(uint8_t)*pData], 0, Level); // ???
+						*pBmpStart++ = RGB565to888(AlphaPixel, Level * 8);
+						Pixels++;
+					}
+				}
+				pData++;
+			}
+			break;
+		case 1: 
+			// {01******} 表示不带Alpha通道不重复的n个像素组成的数据段
+			// {01  +6bit Times}+{nByte Datas},表示不带Alpha通道不重复的n个像素组成的数据段。
+			// {01  +1~63个长度}+{n个字节的数据},{01000000}保留。
+			if(copyline&&y == 1)
+			{
+				copyline = false;
+			}
+			Repeat = (*pData) & 0x3f; // 获得数据组中的长度
+			pData++;
+			for (int i = 1; i <= Repeat; i++)
+			{
+				if (Pixels < PixelLen)
+				{
+					*pBmpStart++ = m_Palette32[(uint8_t)*pData];
+					Pixels++;
+					pData++;
+				}
+			}
+			break;
+		case 2: 
+			// {10******} 表示重复n次像素
+			// {10  +6bit Times}+{1Byte Index}, 表示重复n次像素。
+			// {10  +重复1~63次}+{0~255个调色板引索},{10000000}保留。
+			if(copyline&&y == 1)
+			{
+				copyline = false;
+			}
+			Repeat = (*pData) & 0x3f; // 获得重复的次数
+			pData++;
+			for (int i = 1; i <= Repeat; i++)
+			{
+				if (Pixels <PixelLen)
+				{
+					*pBmpStart++ = m_Palette32[(uint8_t)*pData];
+					Pixels++;
+				}
+			}
+			pData++;
+			break;
+		case 3: 
+			// {11******} 表示跳过n个像素，跳过的像素用透明色代替
+			// {11  +6bit Times}, 表示跳过n个像素，跳过的像素用透明色代替。
+			// {11  +跳过1~63个像素},{11000000}保留。
+			Repeat = (*pData) & 0x3f; // 获得重复次数
+			for (int i = 1; i <= Repeat; i++)
+			{
+				if (Pixels < PixelLen)
+				{
+					pBmpStart++;
+					Pixels++;
+				}
+			}
+			pData++;
+			break;
+		default: // 一般不存在这种情况
+			cout << "Error!" << endl;
+			break;
+		}
+	}
+	if (*pData == 0 && PixelLen >Pixels )
+	{
+		uint32_t Repeat = 0;
+		Repeat = PixelLen - Pixels;
+		for (uint32_t i = 0; i < Repeat; i++)
+		{
+			if (Pixels < PixelLen)
+			{
+				pBmpStart++;
+				Pixels++;
+			}
+		}
+	}
+}
+
+	MAP::MAP(std::string filename) :m_FileName(filename)
 	{
 
 		m_FileStream.open(m_FileName, ios::binary | ios::in);
@@ -33,8 +563,8 @@ namespace NetEase {
 		m_BlockWidth = 320;
 		m_BlockHeight = 240;
 
-		m_ColCount = (uint32_t)ceil(m_Header.Width / m_BlockWidth);
-		m_RowCount = (uint32_t)ceil(m_Header.Height / m_BlockHeight);
+		m_ColCount = (uint32_t)std::ceil(m_Header.Width / m_BlockWidth);
+		m_RowCount = (uint32_t)std::ceil(m_Header.Height / m_BlockHeight);
 		cout << "Row:" << m_RowCount << " Col:" << m_ColCount << endl;
 
 		m_UnitSize = m_RowCount*m_ColCount;
@@ -101,7 +631,7 @@ namespace NetEase {
 		TgaHeader.PixelDepth = pixelDepth;			// 图像每像素存储占用位数
 		TgaHeader.ImageDescruptor = 8;		// 图像描述字符字节(默认:0)
 
-		fstream ofile;
+		std::fstream ofile;
 		ofile.open(filename, ios::out | ios::trunc | ios::binary);
 		//cout << "写TGA图像文件头" << endl;
 		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER)); // 写TGA的文件头
@@ -120,10 +650,10 @@ namespace NetEase {
 
 	int DecompressMask(void* in, void* out)
 	{
-		register uint8_t *op;
-		register  uint8_t *ip;
-		register unsigned t;
-		register  uint8_t *m_pos;
+		uint8_t *op;
+		uint8_t *ip;
+		unsigned t;
+		uint8_t *m_pos;
 
 		op = (uint8_t *)out;
 		ip = (uint8_t *)in;
@@ -287,17 +817,17 @@ namespace NetEase {
 			{
 			case 0xD8:
 				*TempBuffer++ = 0xD8;
-				*Buffer++;
+				Buffer++;
 				TempNum++;
 				break;
 			case 0xA0:
-				*Buffer++;
+				Buffer++;
 				TempBuffer--;
 				TempNum++;
 				break;
 			case 0xC0:
 				*TempBuffer++ = 0xC0;
-				*Buffer++;
+				Buffer++;
 				TempNum++;
 
 				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // 读取长度
@@ -313,7 +843,7 @@ namespace NetEase {
 				break;
 			case 0xC4:
 				*TempBuffer++ = 0xC4;
-				*Buffer++;
+				Buffer++;
 				TempNum++;
 
 				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // 读取长度
@@ -327,7 +857,7 @@ namespace NetEase {
 				break;
 			case 0xDB:
 				*TempBuffer++ = 0xDB;
-				*Buffer++;
+				Buffer++;
 				TempNum++;
 
 				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // 读取长度
@@ -343,14 +873,14 @@ namespace NetEase {
 				*TempBuffer++ = 0xDA;
 				*TempBuffer++ = 0x00;
 				*TempBuffer++ = 0x0C;
-				*Buffer++;
+				Buffer++;
 				TempNum++;
 
 				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // 读取长度
 				ByteSwap(TempTimes); // 将长度转换为Intel顺序
-				*Buffer++;
+				Buffer++;
 				TempNum++;
-				*Buffer++;
+				Buffer++;
 
 				for (int i = 2; i< TempTimes; i++)
 				{
@@ -369,7 +899,7 @@ namespace NetEase {
 					{
 						*TempBuffer++ = 0xFF;
 						*TempBuffer++ = 0x00;
-						*Buffer++;
+						Buffer++;
 						TempNum++;
 						Temp++;
 					}
@@ -381,7 +911,7 @@ namespace NetEase {
 				}
 				// 直接在这里写上了0xFFD9结束Jpeg图片.
 				Temp--; // 这里多了一个字节，所以减去。
-				*TempBuffer--;
+				TempBuffer--;
 				*TempBuffer-- = 0xD9;
 				break;
 			case 0xD9:
@@ -400,7 +930,7 @@ namespace NetEase {
 
 
 
-	bool MAP::ReadJPEG(ifstream &file, uint32_t size, uint32_t index)
+	bool MAP::ReadJPEG(std::ifstream &file, uint32_t size, uint32_t index)
 	{
 		// file.seekg(Size,ios::cur);
 		uint8_t* jpegData = new uint8_t[size];
@@ -423,7 +953,7 @@ namespace NetEase {
 		free(jdec);
 		*/
 		
-		int width, height;
+		// int width, height;
         m_MapUnits[index].BitmapRGB24 =jpegData;// SOIL_load_image_from_memory(jpegData,tmpSize, &width, &height, 0,
 		m_MapUnits[index].Size = tmpSize;
 			//SOIL_LOAD_RGB);
@@ -455,7 +985,7 @@ namespace NetEase {
 		return true;
 	}
 
-	bool MAP::ReadCELL(ifstream &file, uint32_t size, uint32_t index)
+	bool MAP::ReadCELL(std::ifstream &file, uint32_t size, uint32_t index)
 	{
 		file.read((char*)m_MapUnits[index].Cell, size);
 
@@ -470,7 +1000,7 @@ namespace NetEase {
 		return true;
 	}
 
-	bool MAP::ReadBRIG(ifstream &file, uint32_t size, uint32_t index)
+	bool MAP::ReadBRIG(std::ifstream &file, uint32_t size, uint32_t index)
 	{
 		// file.seekg(Size,ios::cur);
 		return false;
@@ -569,7 +1099,8 @@ namespace NetEase {
 		// printf("w:%d h:%d\n",maskInfo.Width,maskInfo.Height );
 		int align_width = (maskInfo.Width / 4 + (maskInfo.Width % 4 != 0)) * 4;	// 以4对齐的宽度
 		char* pMaskDataDec = new char[align_width * maskInfo.Height / 4];		// 1个字节4个像素，故要除以4
-		int dec_mask_size = DecompressMask(pData, pMaskDataDec);
+		// int dec_mask_size = 
+		DecompressMask(pData, pMaskDataDec);
 		// printf("%d %d maskDataDecSize:%d\n",maskInfo.Size,dec_mask_size,(align_width * maskInfo.Height / 4 ));
 
 		//输出mask数据到文件
@@ -594,9 +1125,9 @@ namespace NetEase {
 						uint8_t mask_value = pMaskDataDec[mask_index / 8];	// 定位到字节
 						mask_value = (mask_value >> (mask_index % 8));	// 定位到位
 						if ((mask_value & 3) == 3) {
-							int bmpIndex_y = (maskInfo.StartY+h)*m_MapWidth * 3;
-							int bmpIndex_x = (maskInfo.StartX+w) * 3;
-							int bmpIndex = bmpIndex_y + bmpIndex_x;
+							// int bmpIndex_y = (maskInfo.StartY+h)*m_MapWidth * 3;
+							// int bmpIndex_x = (maskInfo.StartX+w) * 3;
+							// int bmpIndex = bmpIndex_y + bmpIndex_x;
 							uint8_t r = 0x00; //= m_MapPixelsRGB24[bmpIndex];
 							uint8_t g = 0x00;//= m_MapPixelsRGB24[bmpIndex + 1];
 							uint8_t b = 0x00;//= m_MapPixelsRGB24[bmpIndex + 2];
@@ -648,8 +1179,8 @@ namespace NetEase {
 				// printf("\nmat:%d\n", i*col+j );
 				for (int k = 0; k<192; k++) {
 					cells[i*col + j][k] = (m_MapUnits)[i*col + j].Cell[k];
-					int cr = k / 16;
-					int cl = k % 16;
+					// int cr = k / 16;
+					// int cl = k % 16;
 					// printf("%d ", cells[i*col+j][k]);
 					// if(cl==15)printf("\n");
 				}
@@ -672,29 +1203,3 @@ namespace NetEase {
 
 	}
 }
-
-/*
-
-int main()
-{
-	NetEase::MAP xyqMap("1501.map");
-	// printf("m_UnitSize: %d \n", netEaseMap.m_UnitSize );
-	for (int i = 0; i<xyqMap.m_UnitSize; i++)
-	{
-		//printf("i:%d: %x\n",i, xyqMap.m_MaskIndecies[i] );
-		xyqMap.ReadUnit(i);
-		//xyqMap.ReadMask(i);
-
-	}
-	for (int i = 0; i<xyqMap.m_MaskSize; i++)
-	{
-		xyqMap.ReadMask(i);
-		//char* filename,int width,int height,int pixelDepth,char* data
-	}
-	xyqMap.SaveImageFile("b.tga", xyqMap.m_ColCount * 320, xyqMap.m_RowCount * 240, 24, (char*)&xyqMap.m_MapPixelsRGB24[0]);
-	printf("%d\n", xyqMap.m_MaskSize);
-
-
-	return 0;
-}
-*/

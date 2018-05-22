@@ -14,21 +14,12 @@ add_definitions(
 
 
 set(SRC_HEADER_FILES 
-src/MAP.h
-src/Sprite.h
-src/WAS.h
-src/WDF.h
+src/NESupport.h
 )
 
 set(SRC_CPP_FILES 
-src/MAP.cpp
-src/MAP.h
-src/Sprite.cpp
-src/Sprite.h
-src/WAS.cpp
-src/WAS.h
-src/WDF.cpp
-src/WDF.h
+src/NESupport.cpp
+src/NESupport.h
 )
 
 add_library( ${PROJECT_NAME}
