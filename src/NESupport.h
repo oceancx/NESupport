@@ -208,19 +208,19 @@ namespace NE {
 
 		struct MaskInfo : BaseMaskInfo
 		{
-			uint32_t* Data;
+			std::vector<uint32_t> Data;
 		};
 
-		struct UnKnown
-		{
-			uint32_t Offset;
-			uint32_t *Data;			// 未知用途，大小为：第一个单元引索值减去文件头大小。
-		};
+		// struct UnKnown
+		// {
+		// 	uint32_t Offset;
+		// 	uint32_t *Data;			
+		// };
 
 		struct MapUnit
 		{
 			std::vector<uint8_t>  Cell;
-			uint8_t* BitmapRGB24;
+			std::vector<uint8_t> JPEGRGB24;
 			uint32_t Size;
 			uint32_t Index;
 			bool bHasLoad = false;
@@ -259,21 +259,17 @@ namespace NE {
 		MapUnit& GetUnit(int index) { return m_MapUnits[index];};
 		bool HasUnitLoad(int index) { return m_MapUnits[index].bHasLoad;};
 
-		uint32_t* GetMaskBitmap(int index) { return m_MaskInfos[index].Data;};
-		uint8_t* GetUnitBitmap(int index) { return m_MapUnits[index].BitmapRGB24;};
-		uint32_t GetUnitBitmapSize(int index) { return m_MapUnits[index].Size;};
-		uint8_t* Bitmap(){return m_MapPixelsRGB24;};
+		uint32_t* GetMaskBitmap(int index) { return m_MaskInfos[index].Data.data();};
+		uint8_t* GetUnitBitmap(int index) { return m_MapUnits[index].JPEGRGB24.data();};
+		uint32_t GetUnitBitmapSize(int index) { return m_MapUnits[index].JPEGRGB24.size();};
+		uint8_t* Bitmap(){return m_MapPixelsRGB24.data();};
 		
-		void Destroy()
-		{
-			delete[] m_MapPixelsRGB24;
-			m_MapPixelsRGB24= nullptr;
-		};
+	
 private:
 
 		void ByteSwap(uint16_t& value);
 		int DecompressMask(void* in, void* out);
-		uint8_t* MapHandler(uint8_t* jpegData, uint32_t inSize, uint32_t* outSize);
+		void MapHandler(uint8_t* Buffer, uint32_t inSize,uint8_t* outBuffer, uint32_t* outSize);
 
 		bool ReadJPEG(std::ifstream &file, uint32_t size, uint32_t index);
 
@@ -318,7 +314,7 @@ private:
 
 		std::vector<MaskInfo> m_MaskInfos;
 
-		uint8_t* m_MapPixelsRGB24;		//大地图位图
+		std::vector<uint8_t> m_MapPixelsRGB24;		//大地图位图
 		//uint8_t* m_Cur_MapPixelsRGB24;
 	};
 }

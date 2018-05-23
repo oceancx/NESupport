@@ -765,7 +765,7 @@ eof_found:
 	return (op - (uint8_t*)out);
 }
 // 地图的JPEG数据处理器
-uint8_t* MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint32_t* outSize)
+void MAP::MapHandler(uint8_t* Buffer, uint32_t inSize,uint8_t* outBuffer, uint32_t* outSize)
 {
 	// JPEG数据处理原理
 	// 1、复制D8到D9的数据到缓冲区中
@@ -775,32 +775,28 @@ uint8_t* MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint32_t* outSize)
 	// 5、替换FFDA到FF D9之间的FF数据为FF 00
 
 	uint32_t TempNum = 0;						// 临时变量，表示已读取的长度
-	uint8_t* outBuffer;
-	uint8_t* TempBuffer = new uint8_t[inSize * 2];		// 临时变量，表示处理后的数据
-	memset((char*)TempBuffer, 0, inSize * 2);
-	outBuffer = TempBuffer;					// 已处理数据的开始地址
 	uint16_t TempTimes = 0;					// 临时变量，表示循环的次数
 	uint32_t Temp = 0;
 
 	// 当已读取数据的长度小于总长度时继续
 	while (TempNum < inSize && *Buffer++ == 0xFF)
 	{
-		*TempBuffer++ = 0xFF;
+		*outBuffer++ = 0xFF;
 		TempNum++;
 		switch (*Buffer)
 		{
 		case 0xD8:
-			*TempBuffer++ = 0xD8;
+			*outBuffer++ = 0xD8;
 			Buffer++;
 			TempNum++;
 			break;
 		case 0xA0:
 			Buffer++;
-			TempBuffer--;
+			outBuffer--;
 			TempNum++;
 			break;
 		case 0xC0:
-			*TempBuffer++ = 0xC0;
+			*outBuffer++ = 0xC0;
 			Buffer++;
 			TempNum++;
 
@@ -810,13 +806,13 @@ uint8_t* MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint32_t* outSize)
 
 			for (int i = 0; i< TempTimes; i++)
 			{
-				*TempBuffer++ = *Buffer++;
+				*outBuffer++ = *Buffer++;
 				TempNum++;
 			}
 
 			break;
 		case 0xC4:
-			*TempBuffer++ = 0xC4;
+			*outBuffer++ = 0xC4;
 			Buffer++;
 			TempNum++;
 
@@ -825,12 +821,12 @@ uint8_t* MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint32_t* outSize)
 
 			for (int i = 0; i< TempTimes; i++)
 			{
-				*TempBuffer++ = *Buffer++;
+				*outBuffer++ = *Buffer++;
 				TempNum++;
 			}
 			break;
 		case 0xDB:
-			*TempBuffer++ = 0xDB;
+			*outBuffer++ = 0xDB;
 			Buffer++;
 			TempNum++;
 
@@ -839,14 +835,14 @@ uint8_t* MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint32_t* outSize)
 
 			for (int i = 0; i< TempTimes; i++)
 			{
-				*TempBuffer++ = *Buffer++;
+				*outBuffer++ = *Buffer++;
 				TempNum++;
 			}
 			break;
 		case 0xDA:
-			*TempBuffer++ = 0xDA;
-			*TempBuffer++ = 0x00;
-			*TempBuffer++ = 0x0C;
+			*outBuffer++ = 0xDA;
+			*outBuffer++ = 0x00;
+			*outBuffer++ = 0x0C;
 			Buffer++;
 			TempNum++;
 
@@ -858,12 +854,12 @@ uint8_t* MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint32_t* outSize)
 
 			for (int i = 2; i< TempTimes; i++)
 			{
-				*TempBuffer++ = *Buffer++;
+				*outBuffer++ = *Buffer++;
 				TempNum++;
 			}
-			*TempBuffer++ = 0x00;
-			*TempBuffer++ = 0x3F;
-			*TempBuffer++ = 0x00;
+			*outBuffer++ = 0x00;
+			*outBuffer++ = 0x3F;
+			*outBuffer++ = 0x00;
 			Temp += 1; // 这里应该是+3的，因为前面的0xFFA0没有-2，所以这里只+1。
 
 						// 循环处理0xFFDA到0xFFD9之间所有的0xFF替换为0xFF00
@@ -871,26 +867,26 @@ uint8_t* MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint32_t* outSize)
 			{
 				if (*Buffer == 0xFF)
 				{
-					*TempBuffer++ = 0xFF;
-					*TempBuffer++ = 0x00;
+					*outBuffer++ = 0xFF;
+					*outBuffer++ = 0x00;
 					Buffer++;
 					TempNum++;
 					Temp++;
 				}
 				else
 				{
-					*TempBuffer++ = *Buffer++;
+					*outBuffer++ = *Buffer++;
 					TempNum++;
 				}
 			}
 			// 直接在这里写上了0xFFD9结束Jpeg图片.
 			Temp--; // 这里多了一个字节，所以减去。
-			TempBuffer--;
-			*TempBuffer-- = 0xD9;
+			outBuffer--;
+			*outBuffer-- = 0xD9;
 			break;
 		case 0xD9:
 			// 算法问题，这里不会被执行，但结果一样。
-			*TempBuffer++ = 0xD9;
+			*outBuffer++ = 0xD9;
 			TempNum++;
 			break;
 		default:
@@ -899,35 +895,19 @@ uint8_t* MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint32_t* outSize)
 	}
 	Temp += inSize;
 	*outSize = Temp;
-	return outBuffer;
 }
 
 
 bool MAP::ReadJPEG(std::ifstream &file, uint32_t size, uint32_t index)
 {
-	// file.seekg(Size,ios::cur);
-	uint8_t* jpegData = new uint8_t[size];
-	file.read((char*)jpegData, size);
-
+	std::vector<uint8_t> jpegData(size,0);
+	file.read((char*)jpegData.data(), size);
+	
+	m_MapUnits[index].JPEGRGB24.resize(size*2,0);
 	uint32_t tmpSize = 0;
-	jpegData = MapHandler(jpegData, size, &tmpSize);
+	MapHandler(jpegData.data(),size, m_MapUnits[index].JPEGRGB24.data(),&tmpSize);
 
-	// int width, height;
-	// SOIL_load_image_from_memory(jpegData,tmpSize, &width, &height, 0,SOIL_LOAD_RGB);
-	m_MapUnits[index].BitmapRGB24 =jpegData;
-	m_MapUnits[index].Size = tmpSize;
-		
-	// int row = index / m_ColCount;
-	// int col = index%m_ColCount;
-	// uint8_t* pSrc = m_MapUnits[index].BitmapRGB24;
-	// uint8_t* pDes = m_MapPixelsRGB24;
-	// pDes += row * 240 * m_ColCount * 320 * 3 + col * 320 * 3;
-	// for (int h = 0; h<240; h++) {
-	// 	for (int w = 0; w<320 * 3; w++) {
-	// 		*(pDes + w) = *pSrc++;
-	// 	}
-	// 	pDes += m_ColCount * 320 * 3;
-	// }
+	m_MapUnits[index].JPEGRGB24.resize(tmpSize);
 	return true;
 }
 
@@ -935,15 +915,6 @@ bool MAP::ReadCELL(std::ifstream &file, uint32_t size, uint32_t index)
 {
 	m_MapUnits[index].Cell.resize(size,0);
 	file.read((char*)m_MapUnits[index].Cell.data(), size);
-
-	// for (int i = 0; i < 12; ++i)
-	// {
-	// 	for (int j = 0; j < 16; ++j)
-	// 	{
-	// 		printf("%2x ",m_MapUnits[index].Cell[i*16+j] );
-	// 	}
-	// 	printf("Cell size:%d\n",size);
-	// }
 	return true;
 }
 
@@ -958,7 +929,7 @@ void MAP::SaveUnit(int index)
 	char filename[50];
 	sprintf(filename, "MAP_unit_%d.tga", index);
 
-	SaveImageFile(filename, 320,240, 24, (char*) m_MapUnits[index].BitmapRGB24);
+	SaveImageFile(filename, 320,240, 24, (char*) m_MapUnits[index].JPEGRGB24.data());
 }
 
 void MAP::ReadUnit(int index)
@@ -1029,16 +1000,11 @@ void MAP::ReadMask(int index)
 	fs.close();
 
 	int align_width = (maskInfo.Width / 4 + (maskInfo.Width % 4 != 0)) * 4;	// 以4对齐的宽度
-	std::vector<char> pMaskDataDec(align_width * maskInfo.Height / 4,0);// ;;= new char[align_width * maskInfo.Height / 4];		// 1个字节4个像素，故要除以4
+	std::vector<char> pMaskDataDec(align_width * maskInfo.Height / 4,0);// 1个字节4个像素，故要除以4
 	DecompressMask(pData.data(), pMaskDataDec.data());
-	// delete[] pData;
-	// pData = nullptr;
-
+	
 	int pixel_num = maskInfo.Width * maskInfo.Height;
-	maskInfo.Data = new uint32_t[pixel_num];
-	//uint32_t* &pOutMaskBmp = maskInfo.Data;
-	memset(maskInfo.Data, 0, sizeof(uint32_t) * pixel_num);
-
+	maskInfo.Data.resize(pixel_num,0);
 	for (uint32_t h = 0; h< maskInfo.Height; h++)
 	{
 		for (uint32_t w = 0; w< maskInfo.Width; w++)
@@ -1089,13 +1055,8 @@ void MAP::PrintCellMap()
 	for (int i = 0; i<row; i++) {
 		for (int j = 0; j<col; j++) {
 			ReadUnit(i*col + j);
-			// printf("\nmat:%d\n", i*col+j );
 			for (int k = 0; k<192; k++) {
 				cells[i*col + j][k] = (m_MapUnits)[i*col + j].Cell[k];
-				// int cr = k / 16;
-				// int cl = k % 16;
-				// printf("%d ", cells[i*col+j][k]);
-				// if(cl==15)printf("\n");
 			}
 			int startMat_i = i * 12;
 			int startMat_j = j * 16;
