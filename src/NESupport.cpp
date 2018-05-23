@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <memory>
 #include <cmath>
+#include <string>
 using std::cout;
 using std::endl;
 using std::ios;
@@ -181,7 +182,7 @@ WDF::WDF(std::string path)
 		cout << "open wdf file error!!!" << endl;
 		return;
 	}
-	std::cout << "InitWDF:" << m_Path << std::endl;
+	std::cout << "InitWDF:" << m_Path.c_str() << std::endl;
 
 	auto fpos = fs.tellg();
 	fs.seekg(0, std::ios::end);
@@ -545,14 +546,14 @@ void WDF::DataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int 
 		m_FileStream.open(m_FileName, ios::binary | ios::in);
 		if (!m_FileStream)
 		{
-			cout << "Map文件打开失败！" << endl;
+			std::cout << "Map file open error!" << std::endl;
 			return;
 		}
 
 		m_FileStream.read((char*)&m_Header, sizeof(MapHeader));
 		if (m_Header.Flag != 0x4D312E30)
 		{
-			cout << "Map文件格式错误！" << endl;
+			cout << "Map file format error!" << endl;
 			return;
 		}
 
