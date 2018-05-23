@@ -6,7 +6,6 @@
 #include <map>
 #include <memory>
 
-
 namespace NE {
 	struct Sprite
 	{
@@ -148,68 +147,7 @@ namespace NE {
 
 
 
-		// 地图的文件头(梦幻、大话2)
-	struct MapHeader
-	{
-		//public:
-		// 文件头结构共12字节
-		uint32_t		Flag;		//文件标志
-		uint32_t		Width;		//地图宽
-		uint32_t		Height;		//地图高	
-	};
-
-	// 地图的单元头
-	struct MapUnitHeader
-	{
-		//public:
-		uint32_t		Flag;		// 单元标志
-		uint32_t		Size;		// 单元大小
-	};
-
-	// 地图的数据
-	struct MapData
-	{
-		//public:
-		uint32_t		Size;		// 数据大小
-		uint8_t		*Data;		// 数据内容
-	};
-
-	struct MaskHeader
-	{
-		uint32_t	Flag;
-		uint32_t	Size;
-	};
-
-	struct BaseMaskInfo
-	{
-		int	StartX;
-		int	StartY;
-		uint32_t	Width;
-		uint32_t	Height;
-		uint32_t	Size;	// 遮罩大小
-
-	};
-
-	struct MaskInfo : BaseMaskInfo
-	{
-		uint32_t* Data;
-	};
-
-	struct UnKnown
-	{
-		uint32_t Offset;
-		uint32_t *Data;			// 未知用途，大小为：第一个单元引索值减去文件头大小。
-	};
-
-	struct MapUnit
-	{
-		uint8_t  Cell[192];
-		uint8_t* BitmapRGB24;
-		uint32_t Size;
-		uint32_t Index;
-		bool bHasLoad = false;
-	};
-
+	
 	/*
 	地图读取类: xx.scene文件是一个大地图
 	大地图被分成了N个320x240的小切片
@@ -225,7 +163,69 @@ namespace NE {
 	*/
 	class MAP
 	{
-	public:
+		public:
+		// 地图的文件头(梦幻、大话2)
+		struct MapHeader
+		{
+			//public:
+			// 文件头结构共12字节
+			uint32_t		Flag;		//文件标志
+			uint32_t		Width;		//地图宽
+			uint32_t		Height;		//地图高	
+		};
+
+		// 地图的单元头
+		struct MapUnitHeader
+		{
+			//public:
+			uint32_t		Flag;		// 单元标志
+			uint32_t		Size;		// 单元大小
+		};
+
+		// 地图的数据
+		struct MapData
+		{
+			//public:
+			uint32_t		Size;		// 数据大小
+			uint8_t		*Data;		// 数据内容
+		};
+
+		struct MaskHeader
+		{
+			uint32_t	Flag;
+			uint32_t	Size;
+		};
+
+		struct BaseMaskInfo
+		{
+			int	StartX;
+			int	StartY;
+			uint32_t	Width;
+			uint32_t	Height;
+			uint32_t	Size;	// 遮罩大小
+
+		};
+
+		struct MaskInfo : BaseMaskInfo
+		{
+			uint32_t* Data;
+		};
+
+		struct UnKnown
+		{
+			uint32_t Offset;
+			uint32_t *Data;			// 未知用途，大小为：第一个单元引索值减去文件头大小。
+		};
+
+		struct MapUnit
+		{
+			std::vector<uint8_t>  Cell;
+			uint8_t* BitmapRGB24;
+			uint32_t Size;
+			uint32_t Index;
+			bool bHasLoad = false;
+		};
+
 		MAP(std::string filename);
 		
 		~MAP();
@@ -270,6 +270,9 @@ namespace NE {
 			m_MapPixelsRGB24= nullptr;
 		};
 private:
+
+		void ByteSwap(uint16_t& value);
+		int DecompressMask(void* in, void* out);
 		uint8_t* MapHandler(uint8_t* jpegData, uint32_t inSize, uint32_t* outSize);
 
 		bool ReadJPEG(std::ifstream &file, uint32_t size, uint32_t index);
@@ -278,8 +281,7 @@ private:
 
 		bool ReadBRIG(std::ifstream &file, uint32_t size, uint32_t index);
 		
-		std::ifstream m_FileStream;
-		
+	
 		std::string m_FileName;
 
 		int m_Width;
@@ -302,13 +304,13 @@ private:
 
 		MapHeader m_Header;
 
-		uint32_t* m_UnitIndecies;
+		std::vector<uint32_t> m_UnitIndecies;
 
 		uint32_t m_UnitSize;
 
 		MaskHeader m_MaskHeader;
 
-		uint32_t* m_MaskIndecies;
+		std::vector<uint32_t> m_MaskIndecies;
 
 		uint32_t m_MaskSize;
 
