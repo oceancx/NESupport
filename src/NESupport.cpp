@@ -622,7 +622,7 @@ void MAP::ByteSwap(uint16_t& value)
 	value = (value << 8) | tempvalue;
 }
 
-int MAP::DecompressMask(void* in, void* out)
+size_t MAP::DecompressMask(void* in, void* out)
 {
 	uint8_t *op;
 	uint8_t *ip;
@@ -761,7 +761,6 @@ int MAP::DecompressMask(void* in, void* out)
 	}
 
 eof_found:
-	//   if (ip != ip_end) return -1;
 	return (op - (uint8_t*)out);
 }
 // 地图的JPEG数据处理器

@@ -261,14 +261,14 @@ namespace NE {
 
 		uint32_t* GetMaskBitmap(int index) { return m_MaskInfos[index].Data.data();};
 		uint8_t* GetUnitBitmap(int index) { return m_MapUnits[index].JPEGRGB24.data();};
-		uint32_t GetUnitBitmapSize(int index) { return m_MapUnits[index].JPEGRGB24.size();};
+		size_t GetUnitBitmapSize(int index) { return m_MapUnits[index].JPEGRGB24.size();};
 		uint8_t* Bitmap(){return m_MapPixelsRGB24.data();};
 		
 	
 private:
 
 		void ByteSwap(uint16_t& value);
-		int DecompressMask(void* in, void* out);
+		size_t DecompressMask(void* in, void* out);
 		void MapHandler(uint8_t* Buffer, uint32_t inSize,uint8_t* outBuffer, uint32_t* outSize);
 
 		bool ReadJPEG(std::ifstream &file, uint32_t size, uint32_t index);
@@ -288,9 +288,9 @@ private:
 
 		int m_MapHeight;
 
-		float m_BlockWidth;
+		int m_BlockWidth;
 
-		float m_BlockHeight;
+		int m_BlockHeight;
 
 		uint32_t m_RowCount;
 
