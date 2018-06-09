@@ -564,8 +564,8 @@ MAP::MAP(std::string filename) :m_FileName(filename)
 	m_BlockWidth = 320;
 	m_BlockHeight = 240;
 
-	m_ColCount = (uint32_t)std::ceil(m_Header.Width / m_BlockWidth);
-	m_RowCount = (uint32_t)std::ceil(m_Header.Height / m_BlockHeight);
+	m_ColCount = (uint32_t)std::ceil(m_Header.Width *1.0f / m_BlockWidth);
+	m_RowCount = (uint32_t)std::ceil(m_Header.Height*1.0f / m_BlockHeight);
 	cout << "Row:" << m_RowCount << " Col:" << m_ColCount << endl;
 
 	m_UnitSize = m_RowCount*m_ColCount;
@@ -984,7 +984,7 @@ void MAP::ReadMask(int index)
 	if(!fs)return;
 	
 	fs.seekg(m_MaskIndecies[index]);
-	BaseMaskInfo baseMaskInfo{0};//& maskInfo = m_MaskInfos[index];
+	BaseMaskInfo baseMaskInfo;//& maskInfo = m_MaskInfos[index];
 	fs.read((char*)&baseMaskInfo, sizeof(BaseMaskInfo));
 
 	MaskInfo& maskInfo = m_MaskInfos[index];

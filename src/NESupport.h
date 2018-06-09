@@ -193,7 +193,13 @@ namespace NE {
 		struct MaskHeader
 		{
 			uint32_t	Flag;
-			uint32_t	Size;
+			int	Size;
+			MaskHeader()
+				:Flag(0),
+				Size(0)
+			{
+
+			}
 		};
 
 		struct BaseMaskInfo
@@ -203,7 +209,15 @@ namespace NE {
 			uint32_t	Width;
 			uint32_t	Height;
 			uint32_t	Size;	// 遮罩大小
-
+			BaseMaskInfo()
+				:StartX(0),
+				StartY(0),
+				Width(0),
+				Height(0),
+				Size(0)
+			{
+				
+			}
 		};
 
 		struct MaskInfo : BaseMaskInfo
