@@ -235,7 +235,10 @@ WDF::WDF(std::string path)
 
 	for (uint32_t i = 0; i < m_WASNumber; i++)
 	{
-		mIdToPos[mIndencies[i].hash] = i;
+		auto id = mIndencies[i].hash;
+		mIdToPos[id] = i;
+		m_SpritesLoading[id] = false;
+		m_SpritesLoaded[id] = false;
 	}
 
 	m_Sprites.clear();
@@ -256,10 +259,14 @@ WAS WDF::GetWAS(uint32_t id)
 
 Sprite* WDF::LoadSprite(uint32_t id)
 {
-	if (m_Sprites.count(id) > 0) return &m_Sprites[id];
+	if(m_SpritesLoaded[id] ) return &m_Sprites[id];
 
 	if(mIdToPos.count(id) == 0) return nullptr;
-		
+	
+	if (m_SpritesLoading[id]) return nullptr;
+
+	m_SpritesLoading[id] = true;
+	
 	Index index = mIndencies[mIdToPos[id]];
 	
 	auto& wasMemData = m_FileData;
@@ -272,6 +279,8 @@ Sprite* WDF::LoadSprite(uint32_t id)
 	if (header.flag != 0x5053)
 	{
 		std::cout << "Sprite File Flag Error!" << endl;
+		m_SpritesLoading[id] = false;
+		m_SpritesLoaded[id] = true;
 		return nullptr;
 	}
 
@@ -284,7 +293,7 @@ Sprite* WDF::LoadSprite(uint32_t id)
 	}
 
 	
-	Sprite&  sprite = m_Sprites[id];
+	Sprite  sprite;
 
 	sprite.mID = std::to_string(id);
 	sprite.mPath = m_FileName+"/"+sprite.mID;
@@ -303,6 +312,8 @@ Sprite* WDF::LoadSprite(uint32_t id)
 
 	if (frameTotalSize < 0 || frameTotalSize > 1000) {
 		cout << "frame size error!!!" << endl;
+		m_SpritesLoading[id] = false;
+		m_SpritesLoaded[id] = true;
 		return nullptr;
 	}
 	
@@ -328,6 +339,8 @@ Sprite* WDF::LoadSprite(uint32_t id)
 		if(wasFrameHeader.height >= (1<<15) || wasFrameHeader.width >= (1 <<15) ||wasFrameHeader.height < 0  || wasFrameHeader.width < 0)
 		{
 			std::cout << "wasFrameHeader error!!!" << std::endl;
+			m_SpritesLoading[id] = false;
+			m_SpritesLoaded[id] = true;
 			return nullptr;
 		}
 
@@ -375,6 +388,9 @@ Sprite* WDF::LoadSprite(uint32_t id)
 		} 
 		// std::cout << " is blank :" << frame.IsBlank <<" frame:"<< i << std::endl;	
 	}
+	m_Sprites[id] = sprite;
+	m_SpritesLoading[id] = false;
+	m_SpritesLoaded[id] = true;
 	return &m_Sprites[id];
 }
 
@@ -933,9 +949,10 @@ void MAP::SaveUnit(int index)
 
 void MAP::ReadUnit(int index)
 {
-	if (m_MapUnits[index].bHasLoad) {
+	if (m_MapUnits[index].bHasLoad || m_MapUnits[index].bLoading ) {
 		return;
 	}
+	m_MapUnits[index].bLoading = true;
 	std::ifstream fs(m_FileName,std::ios::binary | std::ios::in);
 	if(!fs)return;
 	
@@ -975,6 +992,7 @@ void MAP::ReadUnit(int index)
 
 	m_MapUnits[index].Index = index;
 	m_MapUnits[index].bHasLoad = true;
+	m_MapUnits[index].bLoading = false;
 
 }
 

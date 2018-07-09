@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <set>
 
 namespace NE {
 	struct Sprite
@@ -93,12 +94,7 @@ namespace NE {
 			uint32_t size;	//  WAS文件大小
 			uint32_t spaces; // WAS文件空间
 		};
-
-	
-
-
 	public:
-
 		WDF(std::string path);
 		
 		void DataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen,int y, bool& copyline);
@@ -107,7 +103,7 @@ namespace NE {
 		WAS GetWAS(uint32_t id);
 		void SaveWAS(uint32_t id);
 		
-		Sprite*  LoadSprite(uint32_t id);
+		Sprite* LoadSprite(uint32_t id);
 
 		std::vector<uint32_t> GetAllWASIDs()
 		{
@@ -122,10 +118,7 @@ namespace NE {
 		std::vector<Sprite *> LoadAllSprite();
 
 		~WDF();
-
 	public:
-
-
 		std::vector<Index> mIndencies;
 		std::map<uint32_t, uint32_t> mIdToPos;
 
@@ -142,6 +135,8 @@ namespace NE {
 		std::uint64_t m_FileSize;
 
 		std::map<uint32_t,Sprite> m_Sprites;
+		std::map<uint32_t,bool> m_SpritesLoading;
+		std::map<uint32_t, bool> m_SpritesLoaded;
 		
 	};
 
@@ -238,6 +233,7 @@ namespace NE {
 			uint32_t Size;
 			uint32_t Index;
 			bool bHasLoad = false;
+			bool bLoading = false;
 		};
 
 		MAP(std::string filename);
@@ -272,6 +268,7 @@ namespace NE {
 		MaskInfo& GetMask(int index) { return m_MaskInfos[index];};
 		MapUnit& GetUnit(int index) { return m_MapUnits[index];};
 		bool HasUnitLoad(int index) { return m_MapUnits[index].bHasLoad;};
+		bool IsUnitLoading(int index) { return m_MapUnits[index].bLoading; };
 
 		uint32_t* GetMaskBitmap(int index) { return m_MaskInfos[index].Data.data();};
 		uint8_t* GetUnitBitmap(int index) { return m_MapUnits[index].JPEGRGB24.data();};
