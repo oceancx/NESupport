@@ -558,15 +558,24 @@ void WDF::DataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int 
 
 MAP::MAP(std::string filename) :m_FileName(filename)
 {
-
-	std::ifstream fs(m_FileName, ios::binary | ios::in);
-	if (!fs)
-	{
+	std::fstream fs(m_FileName, ios::in | ios::binary);
+	if (!fs) {
 		std::cout << "Map file open error!" << std::endl;
 		return;
 	}
+	std::cout << "InitMAP:" << m_FileName.c_str() << std::endl;
 
-	fs.read((char*)&m_Header, sizeof(MapHeader));
+	auto fpos = fs.tellg();
+	fs.seekg(0, std::ios::end);
+	m_FileSize = fs.tellg() - fpos;
+
+	m_FileData.resize(m_FileSize);
+	fs.seekg(0, std::ios::beg);
+	fs.read((char*)m_FileData.data(), m_FileSize);
+	fs.close();
+	
+	uint32_t fileOffset = 0;
+	MEM_READ_WITH_OFF(fileOffset, &m_Header, m_FileData, sizeof(MapHeader));
 	if (m_Header.Flag != 0x4D312E30)
 	{
 		cout << "Map file format error!" << endl;
@@ -586,13 +595,16 @@ MAP::MAP(std::string filename) :m_FileName(filename)
 
 	m_UnitSize = m_RowCount*m_ColCount;
 	m_UnitIndecies.resize(m_UnitSize,0);
-	fs.read((char*)m_UnitIndecies.data(), m_UnitSize * 4);
 
-	fs.read((char*)&m_MaskHeader, sizeof(MaskHeader));
+	MEM_READ_WITH_OFF(fileOffset, m_UnitIndecies.data(), m_FileData, m_UnitSize * 4);
+
+	MEM_READ_WITH_OFF(fileOffset, &m_MaskHeader, m_FileData, sizeof(MaskHeader));
+
 	m_MaskSize = m_MaskHeader.Size;
 	m_MaskIndecies.resize(m_MaskSize,0);
-	fs.read((char*)m_MaskIndecies.data(), m_MaskSize * 4);
-	fs.close();
+	
+	MEM_READ_WITH_OFF(fileOffset, m_MaskIndecies.data(), m_FileData, m_MaskSize * 4);
+
 
 	cout << "MAP文件初始化成功！" << endl;
 	m_MapUnits.resize(m_UnitSize);	//vector更改size
@@ -913,10 +925,10 @@ void MAP::MapHandler(uint8_t* Buffer, uint32_t inSize,uint8_t* outBuffer, uint32
 }
 
 
-bool MAP::ReadJPEG(std::ifstream &file, uint32_t size, uint32_t index)
+bool MAP::ReadJPEG(uint32_t& offset, uint32_t size, uint32_t index)
 {
 	std::vector<uint8_t> jpegData(size,0);
-	file.read((char*)jpegData.data(), size);
+	MEM_READ_WITH_OFF(offset, jpegData.data(), m_FileData, size);
 	
 	m_MapUnits[index].JPEGRGB24.resize(size*2,0);
 	uint32_t tmpSize = 0;
@@ -926,14 +938,14 @@ bool MAP::ReadJPEG(std::ifstream &file, uint32_t size, uint32_t index)
 	return true;
 }
 
-bool MAP::ReadCELL(std::ifstream &file, uint32_t size, uint32_t index)
+bool MAP::ReadCELL(uint32_t& offset, uint32_t size, uint32_t index)
 {
 	m_MapUnits[index].Cell.resize(size,0);
-	file.read((char*)m_MapUnits[index].Cell.data(), size);
+	MEM_READ_WITH_OFF(offset, m_MapUnits[index].Cell.data(), m_FileData, size);
 	return true;
 }
 
-bool MAP::ReadBRIG(std::ifstream &file, uint32_t size, uint32_t index)
+bool MAP::ReadBRIG(uint32_t& offset, uint32_t size, uint32_t index)
 {
 	return false;
 }
@@ -953,42 +965,41 @@ void MAP::ReadUnit(int index)
 		return;
 	}
 	m_MapUnits[index].bLoading = true;
-	std::ifstream fs(m_FileName,std::ios::binary | std::ios::in);
-	if(!fs)return;
 	
-	fs.seekg(m_UnitIndecies[index]);
+	uint32_t fileOffset = m_UnitIndecies[index];
 
 	uint32_t eat_num;
-	fs.read((char*)&eat_num, sizeof(uint32_t));
-	fs.seekg(eat_num * 4, ios::cur);
+	MEM_READ_WITH_OFF(fileOffset, &eat_num, m_FileData, sizeof(uint32_t));
+	fileOffset += eat_num * 4;
 
 	bool loop = true;
 	while (loop)
 	{
 		MapUnitHeader unitHeader{0};
-		fs.read((char*)&unitHeader, sizeof(MapUnitHeader));
+		MEM_READ_WITH_OFF(fileOffset, &unitHeader, m_FileData, sizeof(MapUnitHeader));
+
 		//printf("Flag: %x\n",pUnitHeader->Flag );
 		switch (unitHeader.Flag)
 		{
 			// GEPJ "47 45 50 4A"
 			case 0x4A504547: {
-				ReadJPEG(fs, unitHeader.Size, index);
+				ReadJPEG(fileOffset, unitHeader.Size, index);
 				break;
 			}
 			// CELL "4C 4C 45 43"
 			case 0x43454C4C:
-				ReadCELL(fs, unitHeader.Size, index);
+				ReadCELL(fileOffset, unitHeader.Size, index);
 				break;
 			// GIRB "47 49 52 42"
 			case 0x42524947:
-				ReadBRIG(fs, unitHeader.Size, index);
+				ReadBRIG(fileOffset, unitHeader.Size, index);
 				break;
 			default:
 				loop = false;
 				break;
 		}
 	}
-	fs.close();
+	
 
 	m_MapUnits[index].Index = index;
 	m_MapUnits[index].bHasLoad = true;

@@ -282,11 +282,11 @@ private:
 		size_t DecompressMask(void* in, void* out);
 		void MapHandler(uint8_t* Buffer, uint32_t inSize,uint8_t* outBuffer, uint32_t* outSize);
 
-		bool ReadJPEG(std::ifstream &file, uint32_t size, uint32_t index);
+		bool ReadJPEG(uint32_t& offset, uint32_t size, uint32_t index);
 
-		bool ReadCELL(std::ifstream &file, uint32_t size, uint32_t index);
+		bool ReadCELL(uint32_t& offset, uint32_t size, uint32_t index);
 
-		bool ReadBRIG(std::ifstream &file, uint32_t size, uint32_t index);
+		bool ReadBRIG(uint32_t& offset, uint32_t size, uint32_t index);
 		
 	
 		std::string m_FileName;
@@ -326,6 +326,10 @@ private:
 		std::vector<MaskInfo> m_MaskInfos;
 
 		std::vector<uint8_t> m_MapPixelsRGB24;		//大地图位图
+
+		std::vector<uint8_t> m_FileData;
+		std::uint64_t m_FileSize;
+
 		//uint8_t* m_Cur_MapPixelsRGB24;
 	};
 }
