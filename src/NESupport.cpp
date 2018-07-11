@@ -1009,12 +1009,10 @@ void MAP::ReadUnit(int index)
 
 void MAP::ReadMask(int index)
 {
-	std::ifstream fs(m_FileName,std::ios::binary | std::ios::in);
-	if(!fs)return;
+	uint32_t fileOffset = m_MaskIndecies[index];
 	
-	fs.seekg(m_MaskIndecies[index]);
 	BaseMaskInfo baseMaskInfo;//& maskInfo = m_MaskInfos[index];
-	fs.read((char*)&baseMaskInfo, sizeof(BaseMaskInfo));
+	MEM_READ_WITH_OFF(fileOffset, &baseMaskInfo, m_FileData, sizeof(BaseMaskInfo));
 
 	MaskInfo& maskInfo = m_MaskInfos[index];
 	maskInfo.StartX = baseMaskInfo.StartX;
@@ -1024,8 +1022,7 @@ void MAP::ReadMask(int index)
 	maskInfo.Size = baseMaskInfo.Size;
 
 	std::vector<char> pData(maskInfo.Size,0);
-	fs.read(pData.data(), maskInfo.Size);
-	fs.close();
+	MEM_READ_WITH_OFF(fileOffset, pData.data(), m_FileData, maskInfo.Size);
 
 	int align_width = (maskInfo.Width / 4 + (maskInfo.Width % 4 != 0)) * 4;	// 以4对齐的宽度
 	std::vector<char> pMaskDataDec(align_width * maskInfo.Height / 4,0);// 1个字节4个像素，故要除以4
