@@ -635,13 +635,13 @@ MAP::MAP(std::string filename) :m_FileName(filename)
 			for (int j = occupyColStart; j <= occupyColEnd; j++)
 			{
 				int unit = i * m_ColCount + j;
-				
-				maskInfo.OccupyUnits.insert(unit);
-				m_MapUnits[unit].OwnMasks.insert(index);
+				if (unit >= 0 && unit < m_MapUnits.size())
+				{
+					maskInfo.OccupyUnits.insert(unit);
+					m_MapUnits[unit].OwnMasks.insert(index);
+				}
 			}
 	}
-
-
 	cout << "MAP文件初始化成功！" << endl;
 }
 
@@ -1039,6 +1039,11 @@ void MAP::ReadUnit(int index)
 
 void MAP::ReadMask(int index)
 {
+	if (m_MaskInfos[index].bHasLoad || m_MaskInfos[index].bLoading) {
+		return;
+	}
+	m_MaskInfos[index].bLoading = true;
+
 	uint32_t fileOffset = m_MaskIndecies[index];
 	
 	fileOffset += sizeof(BaseMaskInfo);
@@ -1076,6 +1081,9 @@ void MAP::ReadMask(int index)
 			}
 		}
 	}
+
+	m_MaskInfos[index].bHasLoad = true;
+	m_MaskInfos[index].bLoading = false;
 }
 
 void MAP::PrintCellMap()

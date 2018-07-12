@@ -219,6 +219,8 @@ namespace NE {
 		{
 			std::vector<uint32_t> Data;
 			std::set<int> OccupyUnits;
+			bool bHasLoad = false;
+			bool bLoading = false;
 		};
 
 		// struct UnKnown
