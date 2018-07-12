@@ -593,26 +593,56 @@ MAP::MAP(std::string filename) :m_FileName(filename)
 	m_RowCount = (uint32_t)std::ceil(m_Header.Height*1.0f / m_BlockHeight);
 	cout << "Row:" << m_RowCount << " Col:" << m_ColCount << endl;
 
-	m_UnitSize = m_RowCount*m_ColCount;
-	m_UnitIndecies.resize(m_UnitSize,0);
+	m_MapWidth = m_ColCount * m_BlockWidth;
+	m_MapHeight = m_RowCount * m_BlockHeight;
 
+	// m_MapPixelsRGB24 = new uint8_t[m_RowCount*m_ColCount * 320 * 240 * 3];
+	
+	// Read Unit
+	m_UnitSize = m_RowCount*m_ColCount;
+	m_MapUnits.resize(m_UnitSize);
+	m_UnitIndecies.resize(m_UnitSize,0);
 	MEM_READ_WITH_OFF(fileOffset, m_UnitIndecies.data(), m_FileData, m_UnitSize * 4);
 
+	// Read Mask
 	MEM_READ_WITH_OFF(fileOffset, &m_MaskHeader, m_FileData, sizeof(MaskHeader));
-
 	m_MaskSize = m_MaskHeader.Size;
+	m_MaskInfos.resize(m_MaskSize);
 	m_MaskIndecies.resize(m_MaskSize,0);
-	
 	MEM_READ_WITH_OFF(fileOffset, m_MaskIndecies.data(), m_FileData, m_MaskSize * 4);
+	
+	for (size_t index = 0;index < m_MaskSize; index++)
+	{
+		uint32_t offset = m_MaskIndecies[index];
+
+		BaseMaskInfo baseMaskInfo;//& maskInfo = m_MaskInfos[index];
+		MEM_READ_WITH_OFF(offset, &baseMaskInfo, m_FileData, sizeof(BaseMaskInfo));
+
+		MaskInfo& maskInfo = m_MaskInfos[index];
+		maskInfo.StartX = baseMaskInfo.StartX;
+		maskInfo.StartY = baseMaskInfo.StartY;
+		maskInfo.Width = baseMaskInfo.Width;
+		maskInfo.Height = baseMaskInfo.Height;
+		maskInfo.Size = baseMaskInfo.Size;
+
+		int occupyRowStart = maskInfo.StartY / m_BlockHeight;
+		int occupyRowEnd  = (maskInfo.StartY+maskInfo.Height) / m_BlockHeight;
+
+		int occupyColStart = maskInfo.StartX / m_BlockWidth;
+		int occupyColEnd = (maskInfo.StartX + maskInfo.Width) / m_BlockWidth;
+
+		for (int i = occupyRowStart; i <= occupyRowEnd; i++)
+			for (int j = occupyColStart; j <= occupyColEnd; j++)
+			{
+				int unit = i * m_ColCount + j;
+				
+				maskInfo.OccupyUnits.insert(unit);
+				m_MapUnits[unit].OwnMasks.insert(index);
+			}
+	}
 
 
 	cout << "MAP文件初始化成功！" << endl;
-	m_MapUnits.resize(m_UnitSize);	//vector更改size
-	m_MaskInfos.resize(m_MaskSize);
-
-	// m_MapPixelsRGB24 = new uint8_t[m_RowCount*m_ColCount * 320 * 240 * 3];
-	m_MapWidth = m_ColCount * m_BlockWidth;
-	m_MapHeight = m_RowCount * m_BlockHeight;
 }
 
 MAP::~MAP()
@@ -1011,16 +1041,9 @@ void MAP::ReadMask(int index)
 {
 	uint32_t fileOffset = m_MaskIndecies[index];
 	
-	BaseMaskInfo baseMaskInfo;//& maskInfo = m_MaskInfos[index];
-	MEM_READ_WITH_OFF(fileOffset, &baseMaskInfo, m_FileData, sizeof(BaseMaskInfo));
+	fileOffset += sizeof(BaseMaskInfo);
 
 	MaskInfo& maskInfo = m_MaskInfos[index];
-	maskInfo.StartX = baseMaskInfo.StartX;
-	maskInfo.StartY = baseMaskInfo.StartY;
-	maskInfo.Width = baseMaskInfo.Width;
-	maskInfo.Height = baseMaskInfo.Height;
-	maskInfo.Size = baseMaskInfo.Size;
-
 	std::vector<char> pData(maskInfo.Size,0);
 	MEM_READ_WITH_OFF(fileOffset, pData.data(), m_FileData, maskInfo.Size);
 

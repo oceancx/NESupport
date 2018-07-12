@@ -218,6 +218,7 @@ namespace NE {
 		struct MaskInfo : BaseMaskInfo
 		{
 			std::vector<uint32_t> Data;
+			std::set<int> OccupyUnits;
 		};
 
 		// struct UnKnown
@@ -234,6 +235,7 @@ namespace NE {
 			uint32_t Index;
 			bool bHasLoad = false;
 			bool bLoading = false;
+			std::set<int> OwnMasks;
 		};
 
 		MAP(std::string filename);
@@ -328,6 +330,7 @@ private:
 		std::vector<uint8_t> m_MapPixelsRGB24;		//大地图位图
 
 		std::vector<uint8_t> m_FileData;
+
 		std::uint64_t m_FileSize;
 
 		//uint8_t* m_Cur_MapPixelsRGB24;
