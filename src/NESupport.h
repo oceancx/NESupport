@@ -237,6 +237,8 @@ namespace NE {
 			uint32_t Index;
 			bool bHasLoad = false;
 			bool bLoading = false;
+			uint32_t JpegSize;
+			uint32_t JpegOffset;
 			std::set<int> OwnMasks;
 		};
 
@@ -244,6 +246,9 @@ namespace NE {
 		
 		~MAP();
 		
+		void DecodeMapUnits();
+		void DecodeMapMasks();
+
 		//row = index / colcount , col = index % colcount 
 		void ReadUnit(int index);
 
@@ -334,6 +339,8 @@ private:
 		std::vector<uint8_t> m_FileData;
 
 		std::uint64_t m_FileSize;
+
+		std::vector<std::vector<uint8_t>> m_CellData;
 
 		//uint8_t* m_Cur_MapPixelsRGB24;
 	};

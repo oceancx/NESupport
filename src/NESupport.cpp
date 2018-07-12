@@ -610,74 +610,11 @@ MAP::MAP(std::string filename) :m_FileName(filename)
 	m_MaskInfos.resize(m_MaskSize);
 	m_MaskIndecies.resize(m_MaskSize,0);
 	MEM_READ_WITH_OFF(fileOffset, m_MaskIndecies.data(), m_FileData, m_MaskSize * 4);
-	
-	for (size_t index = 0;index < m_MaskSize; index++)
-	{
-		uint32_t offset = m_MaskIndecies[index];
 
-		BaseMaskInfo baseMaskInfo;//& maskInfo = m_MaskInfos[index];
-		MEM_READ_WITH_OFF(offset, &baseMaskInfo, m_FileData, sizeof(BaseMaskInfo));
+	DecodeMapUnits();
 
-		MaskInfo& maskInfo = m_MaskInfos[index];
-		maskInfo.StartX = baseMaskInfo.StartX;
-		maskInfo.StartY = baseMaskInfo.StartY;
-		maskInfo.Width = baseMaskInfo.Width;
-		maskInfo.Height = baseMaskInfo.Height;
-		maskInfo.Size = baseMaskInfo.Size;
+	DecodeMapMasks();
 
-		int occupyRowStart = maskInfo.StartY / m_BlockHeight;
-		int occupyRowEnd  = (maskInfo.StartY+maskInfo.Height) / m_BlockHeight;
-
-		int occupyColStart = maskInfo.StartX / m_BlockWidth;
-		int occupyColEnd = (maskInfo.StartX + maskInfo.Width) / m_BlockWidth;
-
-		for (int i = occupyRowStart; i <= occupyRowEnd; i++)
-			for (int j = occupyColStart; j <= occupyColEnd; j++)
-			{
-				int unit = i * m_ColCount + j;
-				if (unit >= 0 && unit < m_MapUnits.size())
-				{
-					maskInfo.OccupyUnits.insert(unit);
-					m_MapUnits[unit].OwnMasks.insert(index);
-				}
-			}
-	}
-
-	for (size_t i = 0;i< m_MapUnits.size();i++)
-	{
-		uint32_t fileOffset = m_UnitIndecies[i];
-		uint32_t eat_num;
-		MEM_READ_WITH_OFF(fileOffset, &eat_num, m_FileData, sizeof(uint32_t));
-		fileOffset += eat_num * 4;
-
-		bool loop = true;
-		while (loop)
-		{
-			MapUnitHeader unitHeader{ 0 };
-			MEM_READ_WITH_OFF(fileOffset, &unitHeader, m_FileData, sizeof(MapUnitHeader));
-
-			//printf("Flag: %x\n",pUnitHeader->Flag );
-			switch (unitHeader.Flag)
-			{
-				// GEPJ "47 45 50 4A"
-			case 0x4A504547: {
-				fileOffset += unitHeader.Size;
-				break;
-			}
-							 // CELL "4C 4C 45 43"
-			case 0x43454C4C:
-				ReadCELL(fileOffset, unitHeader.Size,i);
-				break;
-				// GIRB "47 49 52 42"
-			case 0x42524947:
-				fileOffset += unitHeader.Size;
-				break;
-			default:
-				loop = false;
-				break;
-			}
-		}
-	}
 	cout << "MAP文件初始化成功！" << endl;
 }
 
@@ -999,9 +936,80 @@ bool MAP::ReadJPEG(uint32_t& offset, uint32_t size, uint32_t index)
 	m_MapUnits[index].JPEGRGB24.resize(size*2,0);
 	uint32_t tmpSize = 0;
 	MapHandler(jpegData.data(),size, m_MapUnits[index].JPEGRGB24.data(),&tmpSize);
-
 	m_MapUnits[index].JPEGRGB24.resize(tmpSize);
 	return true;
+}
+
+
+void MAP::DecodeMapUnits()
+{
+	for (size_t i = 0; i < m_MapUnits.size(); i++)
+	{
+		uint32_t fileOffset = m_UnitIndecies[i];
+		uint32_t eat_num;
+		MEM_READ_WITH_OFF(fileOffset, &eat_num, m_FileData, sizeof(uint32_t));
+		fileOffset += eat_num * 4;
+		bool loop = true;
+		while (loop)
+		{
+			MapUnitHeader unitHeader{ 0 };
+			MEM_READ_WITH_OFF(fileOffset, &unitHeader, m_FileData, sizeof(MapUnitHeader));
+			switch (unitHeader.Flag)
+			{
+			case 0x4A504547: 
+			{
+				m_MapUnits[i].JpegOffset = fileOffset;
+				m_MapUnits[i].JpegSize = unitHeader.Size;
+				fileOffset += unitHeader.Size;
+				break;
+			}
+			case 0x43454C4C:
+				ReadCELL(fileOffset, unitHeader.Size, i);
+				break;
+			case 0x42524947:
+				fileOffset += unitHeader.Size;
+				break;
+			default:
+				loop = false;
+				break;
+			}
+		}
+	}
+}
+
+void MAP::DecodeMapMasks()
+{
+	for (size_t index = 0; index < m_MaskSize; index++)
+	{
+		uint32_t offset = m_MaskIndecies[index];
+
+		BaseMaskInfo baseMaskInfo;//& maskInfo = m_MaskInfos[index];
+		MEM_READ_WITH_OFF(offset, &baseMaskInfo, m_FileData, sizeof(BaseMaskInfo));
+
+		MaskInfo& maskInfo = m_MaskInfos[index];
+		maskInfo.StartX = baseMaskInfo.StartX;
+		maskInfo.StartY = baseMaskInfo.StartY;
+		maskInfo.Width = baseMaskInfo.Width;
+		maskInfo.Height = baseMaskInfo.Height;
+		maskInfo.Size = baseMaskInfo.Size;
+
+		int occupyRowStart = maskInfo.StartY / m_BlockHeight;
+		int occupyRowEnd = (maskInfo.StartY + maskInfo.Height) / m_BlockHeight;
+
+		int occupyColStart = maskInfo.StartX / m_BlockWidth;
+		int occupyColEnd = (maskInfo.StartX + maskInfo.Width) / m_BlockWidth;
+
+		for (int i = occupyRowStart; i <= occupyRowEnd; i++)
+			for (int j = occupyColStart; j <= occupyColEnd; j++)
+			{
+				int unit = i * m_ColCount + j;
+				if (unit >= 0 && unit < m_MapUnits.size())
+				{
+					maskInfo.OccupyUnits.insert(unit);
+					m_MapUnits[unit].OwnMasks.insert(index);
+				}
+			}
+	}
 }
 
 bool MAP::ReadCELL(uint32_t& offset, uint32_t size, uint32_t index)
@@ -1013,7 +1021,8 @@ bool MAP::ReadCELL(uint32_t& offset, uint32_t size, uint32_t index)
 
 bool MAP::ReadBRIG(uint32_t& offset, uint32_t size, uint32_t index)
 {
-	return false;
+	offset += size;
+	return true;
 }
 
 void MAP::SaveUnit(int index)
@@ -1032,45 +1041,11 @@ void MAP::ReadUnit(int index)
 	}
 	m_MapUnits[index].bLoading = true;
 	
-	uint32_t fileOffset = m_UnitIndecies[index];
-
-	uint32_t eat_num;
-	MEM_READ_WITH_OFF(fileOffset, &eat_num, m_FileData, sizeof(uint32_t));
-	fileOffset += eat_num * 4;
-
-	bool loop = true;
-	while (loop)
-	{
-		MapUnitHeader unitHeader{0};
-		MEM_READ_WITH_OFF(fileOffset, &unitHeader, m_FileData, sizeof(MapUnitHeader));
-
-		//printf("Flag: %x\n",pUnitHeader->Flag );
-		switch (unitHeader.Flag)
-		{
-			// GEPJ "47 45 50 4A"
-			case 0x4A504547: {
-				ReadJPEG(fileOffset, unitHeader.Size, index);
-				break;
-			}
-			// CELL "4C 4C 45 43"
-			case 0x43454C4C:
-				ReadCELL(fileOffset, unitHeader.Size, index);
-				break;
-			// GIRB "47 49 52 42"
-			case 0x42524947:
-				ReadBRIG(fileOffset, unitHeader.Size, index);
-				break;
-			default:
-				loop = false;
-				break;
-		}
-	}
-	
+	ReadJPEG(m_MapUnits[index].JpegOffset, m_MapUnits[index].JpegSize, index);
 
 	m_MapUnits[index].Index = index;
 	m_MapUnits[index].bHasLoad = true;
 	m_MapUnits[index].bLoading = false;
-
 }
 
 void MAP::ReadMask(int index)
