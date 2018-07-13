@@ -642,6 +642,42 @@ MAP::MAP(std::string filename) :m_FileName(filename)
 				}
 			}
 	}
+
+	for (size_t i = 0;i< m_MapUnits.size();i++)
+	{
+		uint32_t fileOffset = m_UnitIndecies[i];
+		uint32_t eat_num;
+		MEM_READ_WITH_OFF(fileOffset, &eat_num, m_FileData, sizeof(uint32_t));
+		fileOffset += eat_num * 4;
+
+		bool loop = true;
+		while (loop)
+		{
+			MapUnitHeader unitHeader{ 0 };
+			MEM_READ_WITH_OFF(fileOffset, &unitHeader, m_FileData, sizeof(MapUnitHeader));
+
+			//printf("Flag: %x\n",pUnitHeader->Flag );
+			switch (unitHeader.Flag)
+			{
+				// GEPJ "47 45 50 4A"
+			case 0x4A504547: {
+				fileOffset += unitHeader.Size;
+				break;
+			}
+							 // CELL "4C 4C 45 43"
+			case 0x43454C4C:
+				ReadCELL(fileOffset, unitHeader.Size,i);
+				break;
+				// GIRB "47 49 52 42"
+			case 0x42524947:
+				fileOffset += unitHeader.Size;
+				break;
+			default:
+				loop = false;
+				break;
+			}
+		}
+	}
 	cout << "MAP文件初始化成功！" << endl;
 }
 
