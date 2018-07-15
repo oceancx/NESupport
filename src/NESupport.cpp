@@ -257,6 +257,15 @@ WAS WDF::GetWAS(uint32_t id)
 	return WAS(m_Path, index.offset);
 }
 
+void WDF::UnLoadSprite(uint32_t id)
+{
+	auto& it = m_Sprites.find(id);
+	if (it!= m_Sprites.end())
+	{
+		m_Sprites.erase(it);
+	}
+}
+
 Sprite* WDF::LoadSprite(uint32_t id)
 {
 	if(m_SpritesLoaded[id] ) return &m_Sprites[id];

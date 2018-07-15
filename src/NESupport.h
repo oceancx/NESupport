@@ -104,7 +104,7 @@ namespace NE {
 		void SaveWAS(uint32_t id);
 		
 		Sprite* LoadSprite(uint32_t id);
-
+		void UnLoadSprite(uint32_t id);
 		std::vector<uint32_t> GetAllWASIDs()
 		{
 			std::vector<uint32_t> ids;
