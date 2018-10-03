@@ -266,15 +266,13 @@ namespace NE {
 		}
 	}
 
-	Sprite* WDF::LoadSprite(uint32_t id)
+	Sprite* WDF::LoadSpriteHeader(uint32_t id)
 	{
-		if (m_SpritesLoaded[id]) return &m_Sprites[id];
-
-		if (mIdToPos.count(id) == 0) return nullptr;
-
-		if (m_SpritesLoading[id]) return nullptr;
-
-		m_SpritesLoading[id] = true;
+		auto it = m_Sprites.find(id);
+		if (it != m_Sprites.end())
+		{
+			return &it->second;
+		}
 
 		Index index = mIndencies[mIdToPos[id]];
 
@@ -288,8 +286,6 @@ namespace NE {
 		if (header.flag != 0x5053)
 		{
 			std::cerr << "Sprite File Flag Error!" << endl;
-			m_SpritesLoading[id] = false;
-			m_SpritesLoaded[id] = true;
 			return nullptr;
 		}
 
@@ -301,9 +297,9 @@ namespace NE {
 			delete[] m_AddonHead;
 		}
 
-
-		Sprite  sprite;
-
+		Sprite&  sprite = m_Sprites[id];
+		sprite.FrameLoaded = false;
+		sprite.FrameWASOffset = wasReadOff;
 		sprite.mID = std::to_string(id);
 		sprite.mPath = m_FileName + "/" + sprite.mID;
 		sprite.mGroupSize = header.group;
@@ -314,18 +310,27 @@ namespace NE {
 		sprite.mHeight = std::max(0, sprite.mHeight);
 		sprite.mKeyX = header.key_x;
 		sprite.mKeyY = header.key_y;
+		return &sprite;
+	}
 
-		int frameTotalSize = sprite.mGroupSize* sprite.mFrameSize;
+	bool WDF::LoadSpriteData(Sprite* sprite)
+	{
+		if (sprite == nullptr) return false;
+		if (sprite->FrameLoaded)return true;
 
-		std::cerr << "FrameTotalSize: " << frameTotalSize << std::endl;
+		uint32_t id = std::stoul(sprite->mID);
 
-		if (frameTotalSize < 0 || frameTotalSize > 1000) {
-			cerr << "frame size error!!!" << endl;
-			m_SpritesLoading[id] = false;
-			m_SpritesLoaded[id] = true;
-			return nullptr;
-		}
+		if (m_SpritesLoaded[id]) return &m_Sprites[id];
 
+		if (mIdToPos.count(id) == 0) return nullptr;
+
+		if (m_SpritesLoading[id]) return nullptr;
+
+		m_SpritesLoading[id] = true;
+
+		auto& wasMemData = m_FileData;
+		uint32_t wasReadOff = sprite->FrameWASOffset;
+		int frameTotalSize = sprite->mFrameSize*sprite->mGroupSize;
 		MEM_READ_WITH_OFF(wasReadOff, &m_Palette16[0], wasMemData, 256 * 2);
 		for (int k = 0; k < 256; k++)
 		{
@@ -335,13 +340,11 @@ namespace NE {
 		std::vector<uint32_t> frameIndexes(frameTotalSize, 0);
 		MEM_READ_WITH_OFF(wasReadOff, frameIndexes.data(), wasMemData, frameTotalSize * 4);
 
-		sprite.mFrames.resize(frameTotalSize);
-
-		uint32_t frameHeadOffset = 2 + 2 + header.len;
+		sprite->mFrames.resize(frameTotalSize);
 
 		for (int i = 0; i < frameTotalSize; i++)
 		{
-			wasReadOff = index.offset + frameHeadOffset + frameIndexes[i];
+			wasReadOff = sprite->FrameWASOffset + frameIndexes[i];
 			WAS::FrameHeader wasFrameHeader{ 0 };
 			MEM_READ_WITH_OFF(wasReadOff, &wasFrameHeader, wasMemData, sizeof(WAS::FrameHeader));
 
@@ -353,7 +356,7 @@ namespace NE {
 				return nullptr;
 			}
 
-			Sprite::Sequence& frame = sprite.mFrames[i];
+			Sprite::Sequence& frame = sprite->mFrames[i];
 			frame.key_x = wasFrameHeader.key_x;
 			frame.key_y = wasFrameHeader.key_y;
 			frame.width = wasFrameHeader.width;
@@ -368,7 +371,7 @@ namespace NE {
 			bool copyLine = true;
 			for (int j = 0; j < frame.height; j++)
 			{
-				uint32_t lineDataPos = index.offset + frameIndexes[i] + frameHeadOffset + frameLine[j];
+				uint32_t lineDataPos = sprite->FrameWASOffset  + frameIndexes[i] + frameLine[j];
 				uint8_t* lineData = m_FileData.data() + lineDataPos;
 				pBmpStart = frame.src.data() + frame.width*(j);
 				int pixelLen = frame.width;
@@ -397,10 +400,18 @@ namespace NE {
 			}
 			// std::cerr << " is blank :" << frame.IsBlank <<" frame:"<< i << std::endl;	
 		}
-		m_Sprites[id] = sprite;
+		sprite->FrameLoaded = true;
+		m_Sprites[id] = *sprite;
 		m_SpritesLoading[id] = false;
 		m_SpritesLoaded[id] = true;
 		return &m_Sprites[id];
+	}
+
+	Sprite* WDF::LoadSprite(uint32_t id)
+	{
+		Sprite* sprite = LoadSpriteHeader(id);
+		LoadSpriteData(sprite);
+		return sprite;
 	}
 
 	void WDF::SaveWAS(uint32_t id)

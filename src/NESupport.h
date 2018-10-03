@@ -32,6 +32,8 @@ namespace NE {
 		std::string mPath;
 		std::vector<Sequence> mFrames;
 		void SaveImage(int index);
+		uint32_t FrameWASOffset;
+		bool FrameLoaded;
 	};
 
 
@@ -103,8 +105,10 @@ namespace NE {
 		void SaveWAS(uint32_t id);
 
 		Sprite* LoadSprite(uint32_t id);
-
 		void UnLoadSprite(uint32_t id);
+
+		Sprite* LoadSpriteHeader(uint32_t id);
+		bool LoadSpriteData(Sprite* sprite);
 
 		std::vector<uint32_t> GetAllWASIDs()
 		{
