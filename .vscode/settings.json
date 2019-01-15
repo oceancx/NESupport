@@ -1,6 +1,0 @@
-{
-	"files.associations": {
-		"*.tab": "tsv",
-		"map": "cpp"
-	}
-}
