@@ -259,7 +259,7 @@ namespace NE {
 
 	void WDF::UnLoadSprite(uint32_t id)
 	{
-		auto& it = m_Sprites.find(id);
+		auto it = m_Sprites.find(id);
 		if (it != m_Sprites.end())
 		{
 			m_Sprites.erase(it);
