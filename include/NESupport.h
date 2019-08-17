@@ -31,7 +31,7 @@ namespace NE {
 		std::string mID;
 		std::string mPath;
 		std::vector<Sequence> mFrames;
-		void SaveImage(int index);
+		void SaveImage(const char* filename,int index);
 		uint32_t FrameWASOffset;
 		bool FrameLoaded;
 	};
@@ -229,7 +229,7 @@ namespace NE {
 
 		void PrintCellMap();
 
-		void SaveImageFile(char* filename, int width, int height, int pixelDepth, char* data);
+		void SaveImageFile(const char* filename, int width, int height, int pixelDepth, char* data);
 
 		int MapWidth() { return m_MapWidth; };
 		int MapHeight() { return m_MapHeight; };

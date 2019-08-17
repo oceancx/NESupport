@@ -19,65 +19,30 @@ using std::ios;
 #pragma pack(1)
 struct TGA_FILE_HEADER
 {
-	uint8_t IdLength;				// 图像信息字段(默认:0)
-	uint8_t ColorMapType;			// 颜色标的类型(默认0)
-	uint8_t ImageType;				// 图像类型码(支持2或10)
-	uint16_t ColorMapFirstIndex;	// 颜色表的引索(默认:0)
-	uint16_t ColorMapLength;		// 颜色表的长度(默认:0)
-	uint8_t ColorMapEntrySize;		// 颜色表表项的为数(默认:0，支持16/24/32)
-	uint16_t XOrigin;				// 图像X坐标的起始位置(默认:0)
-	uint16_t YOrigin;				// 图像Y坐标的起始位置(默认:0)
-	uint16_t ImageWidth;			// 图像的宽度
-	uint16_t ImageHeight;			// 图像的高度
-	uint8_t PixelDepth;				// 图像每像素存储占用位数
-	uint8_t ImageDescruptor;		// 图像描述字符字节(默认:0)
+	uint8_t IdLength;				
+	uint8_t ColorMapType;			
+	uint8_t ImageType;				// 2 or 10
+	uint16_t ColorMapFirstIndex;	
+	uint16_t ColorMapLength;		
+	uint8_t ColorMapEntrySize;		// (default:0，support 16/24/32)
+	uint16_t XOrigin;				
+	uint16_t YOrigin;				
+	uint16_t ImageWidth;			
+	uint16_t ImageHeight;			
+	uint8_t PixelDepth;				// 8,16,24,32
+	uint8_t ImageDescruptor;		
 };
 #pragma pack(pop)
 #endif
 
 namespace NE {
 
-	void Sprite::SaveImage(int index)
-	{
-		TGA_FILE_HEADER TgaHeader;
-		memset(&TgaHeader, 0, 18);
-		TgaHeader.IdLength = 0;
-		TgaHeader.ColorMapType = 0;
-		TgaHeader.ImageType = 0x02;
-		TgaHeader.ColorMapFirstIndex = 0;
-		TgaHeader.ColorMapLength = 0;
-		TgaHeader.ColorMapEntrySize = 0;
-		TgaHeader.XOrigin = 0;
-		TgaHeader.YOrigin = 0;
-		TgaHeader.ImageWidth = mWidth;
-		TgaHeader.ImageHeight = mHeight;
-		TgaHeader.PixelDepth = 32;
-		TgaHeader.ImageDescruptor = 8;
-
-		char outfilename[255];
-		int gpos = index / mFrameSize;
-		int cpos = index % mFrameSize;
-		//sprintf(outfilename, "mhxy%d_%d.tga", gpos, cpos);
-		//printf("%s\n", outfilename);
-
-		std::ofstream ofile(outfilename, std::ios::out | std::ios::trunc | std::ios::binary);
-		if (!ofile)return;
-		//cerr << "写TGA图像文件头" << endl;
-		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER)); // 写TGA的文件头
-		ofile.write((char*)mFrames[index].src.data(), mWidth*mHeight * 4);
-		//std::cerr << "完成 " << outfilename << " 帧图片输出~" << std::endl;
-		ofile.close();
-	}
-
-
-
 
 	uint8_t MixAlpha(uint8_t color, uint8_t alpha)
 	{
 		// a*C+(1-a)*C
 		uint32_t res = color * alpha / 0xff;
-		res = 0;
-		return res > 0xff ? 0xff : res;
+		return res > 0xff ? (res%0xff) : res;
 	}
 
 	uint32_t RGB565to888(uint16_t color, uint8_t alpha)
@@ -134,6 +99,47 @@ namespace NE {
 		return Result;
 	}
 
+	void Sprite::SaveImage(const char* filename, int index)
+	{
+		Sequence& sq = mFrames[index];
+
+		TGA_FILE_HEADER TgaHeader;
+		memset(&TgaHeader, 0, 18);
+
+		TgaHeader.IdLength = 0;
+		TgaHeader.ColorMapType = 0;
+		TgaHeader.ImageType = 0x02;
+		TgaHeader.ColorMapFirstIndex = 0;
+		TgaHeader.ColorMapLength = 0;
+		TgaHeader.ColorMapEntrySize = 0;
+		TgaHeader.XOrigin = 0;
+		TgaHeader.YOrigin = 0;
+		TgaHeader.ImageWidth = sq.width;
+		TgaHeader.ImageHeight = sq.height;
+		TgaHeader.PixelDepth = 24;
+		TgaHeader.ImageDescruptor = 8;
+		std::ofstream ofile(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+		if (!ofile)return;
+
+		uint8_t* img_data = new uint8_t[sq.src.size() * 3];
+		for (int row = 0; row < sq.height; row++) {
+			for (int col = 0; col < sq.width; col++) {
+				int fliprow = sq.height-1 - row;
+				int i = fliprow * sq.width + col;
+				int datai = row * sq.width + col;
+				uint32_t pix = sq.src[i];
+				img_data[datai * 3] = (pix & 0xff0000) >> 16;
+				img_data[datai * 3 + 1] = (pix & 0xff00) >> 8;
+				img_data[datai * 3 + 2] = pix & 0xff;
+			}
+		}
+		
+		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
+		ofile.write((char*)img_data, sq.src.size() * 3);
+		delete[] img_data;
+		img_data = nullptr;
+		ofile.close();
+	}
 
 	WAS::WAS(std::string filename)
 		:WAS(filename, 0)
@@ -635,7 +641,7 @@ namespace NE {
 
 		DecodeMapMasks();
 
-		//cout << "MAP文件初始化成功！" << endl;
+		//cout << "MAP init success!" << endl;
 	}
 
 	MAP::~MAP()
@@ -643,7 +649,7 @@ namespace NE {
 
 	}
 
-	void MAP::SaveImageFile(char* filename, int width, int height, int pixelDepth, char* data)
+	void MAP::SaveImageFile(const char* filename, int width, int height, int pixelDepth, char* data)
 	{
 		TGA_FILE_HEADER TgaHeader;
 		memset(&TgaHeader, 0, 18);
@@ -667,7 +673,7 @@ namespace NE {
 		ofile.close();
 	}
 
-	// 2字节高低位调换
+	// 2 bytes high bit swap 
 	void MAP::ByteSwap(uint16_t& value)
 	{
 		uint16_t tempvalue = value >> 8;
@@ -815,7 +821,7 @@ namespace NE {
 	eof_found:
 		return (op - (uint8_t*)out);
 	}
-	// 地图的JPEG数据处理器
+
 	void MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint8_t* outBuffer, uint32_t* outSize)
 	{
 		// JPEG数据处理原理
@@ -985,7 +991,7 @@ namespace NE {
 					break;
 				}
 				case 0x43454C4C:
-					ReadCELL(fileOffset, unitHeader.Size, i);
+					ReadCELL(fileOffset, (uint32_t)unitHeader.Size, (uint32_t)i);
 					break;
 				case 0x42524947:
 					fileOffset += unitHeader.Size;
@@ -1027,7 +1033,7 @@ namespace NE {
 					if (unit >= 0 && unit < m_MapUnits.size())
 					{
 						maskInfo.OccupyUnits.insert(unit);
-						m_MapUnits[unit].OwnMasks.insert(index);
+						m_MapUnits[unit].OwnMasks.insert((int)index);
 					}
 				}
 		}
@@ -1049,10 +1055,8 @@ namespace NE {
 	void MAP::SaveUnit(int index)
 	{
 		ReadUnit(index);
-		char filename[50];
-		sprintf(filename, "MAP_unit_%d.tga", index);
-
-		SaveImageFile(filename, 320, 240, 24, (char*)m_MapUnits[index].JPEGRGB24.data());
+		std::string filename = "MAP_unit_" + std::to_string(index) + ".tga";
+		SaveImageFile(filename.c_str(), 320, 240, 24, (char*)m_MapUnits[index].JPEGRGB24.data());
 	}
 
 	void MAP::ReadUnit(int index)
@@ -1084,8 +1088,8 @@ namespace NE {
 		std::vector<char> pData(maskInfo.Size, 0);
 		MEM_READ_WITH_OFF(fileOffset, pData.data(), m_FileData, maskInfo.Size);
 
-		int align_width = (maskInfo.Width / 4 + (maskInfo.Width % 4 != 0)) * 4;	// 以4对齐的宽度
-		std::vector<char> pMaskDataDec(align_width * maskInfo.Height / 4, 0);// 1个字节4个像素，故要除以4
+		int align_width = (maskInfo.Width / 4 + (maskInfo.Width % 4 != 0)) * 4;	// align 4 bytes
+		std::vector<char> pMaskDataDec(align_width * maskInfo.Height / 4, 0);
 		DecompressMask(pData.data(), pMaskDataDec.data());
 
 		int pixel_num = maskInfo.Width * maskInfo.Height;
@@ -1094,9 +1098,9 @@ namespace NE {
 		{
 			for (uint32_t w = 0; w < maskInfo.Width; w++)
 			{
-				int mask_index = (h * align_width + w) * 2;		// 单位:位
-				uint8_t mask_value = pMaskDataDec[mask_index / 8];	// 定位到字节
-				mask_value = (mask_value >> (mask_index % 8));	// 定位到位
+				int mask_index = (h * align_width + w) * 2;		
+				uint8_t mask_value = pMaskDataDec[mask_index / 8];	
+				mask_value = (mask_value >> (mask_index % 8));	
 				if ((mask_value & 3) == 3) {
 					// int bmpIndex_y = (maskInfo.StartY+h)*m_MapWidth * 3;
 					// int bmpIndex_x = (maskInfo.StartX+w) * 3;
