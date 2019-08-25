@@ -102,7 +102,7 @@ namespace NE {
 		void DataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen, int y, bool& copyline);
 
 		WAS GetWAS(uint32_t id);
-		void SaveWAS(uint32_t id);
+		void SaveWAS(uint32_t id, const char* path);
 
 		Sprite* LoadSprite(uint32_t id);
 		void UnLoadSprite(uint32_t id);

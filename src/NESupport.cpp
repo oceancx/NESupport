@@ -58,6 +58,25 @@ namespace NE {
 		return   A << 24 | (B << 16) | (G << 8) | R;
 	}
 
+
+	uint16_t ChangeColorPal(uint16_t color, std::vector<uint16_t> c)
+	{
+		unsigned int r = (color >> 11) & 0x1f;
+		unsigned int g = (color >> 5) & 0x3f;
+		unsigned int b = (color) & 0x1f;
+		unsigned int  CR, CG, CB;
+
+		CR = ((r * c[0] + g * c[1] + b * c[2]) >> 8);
+		if (CR > 0x1f) CR = 0x1f;
+
+		CG = ((r *  c[3] + g * c[4] + b * c[5]) >> 8);
+		if (CG > 0x3f) CG = 0x3F;
+
+		CB = ((r *  c[6] + g * c[7] + b * c[8]) >> 8);
+		if (CB > 0x1f) CB = 0x1f;
+		return   (CR << 11) | (CG << 5) | CB;
+	}
+
 	// 16bit 565Type Alpha mix
 	uint16_t Alpha565(uint16_t Src, uint16_t Des, uint8_t Alpha)
 	{
@@ -338,9 +357,65 @@ namespace NE {
 		uint32_t wasReadOff = sprite->FrameWASOffset;
 		int frameTotalSize = sprite->mFrameSize*sprite->mGroupSize;
 		MEM_READ_WITH_OFF(wasReadOff, &m_Palette16[0], wasMemData, 256 * 2);
+
 		for (int k = 0; k < 256; k++)
 		{
-			m_Palette32[k] = RGB565to888(m_Palette16[k], 0xff);
+			if (id == 1345628455) {
+				m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
+					52,65,0,
+					0,152,204,
+					129,101,125
+					});
+			}
+			else if (id == 1228435406 || id == 1425276052 || id == 2840575336) {
+				if (k <= 39) {
+					/*m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
+						220,220,512,
+						512,512,510,
+						512,510,512
+						});*/
+					/*m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
+						512,335,421,
+						0,0,0,
+						378,225,230
+						});*/
+
+					m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
+						0,0,0,
+						512,512,191,
+						325,0,0
+						});
+				}
+				else if (k <= 79) {
+					m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
+						211,211,230,
+						445,292,445,
+						306,306,206
+						});
+				}
+				else if (k <= 119) {
+					/*m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
+						0,0,0,
+						24,24,24,
+						19,19,19
+						});*/
+
+					m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
+						100,72,144,
+						86,244,206,
+						100,201,72
+						});
+				}
+				else
+				{
+
+				}
+			}
+		}
+
+		for (int k = 0; k < 256; k++)
+		{
+			m_Palette32[k] = RGB565to888(m_Palette16[k], 0xff);	
 		}
 
 		std::vector<uint32_t> frameIndexes(frameTotalSize, 0);
@@ -420,7 +495,7 @@ namespace NE {
 		return sprite;
 	}
 
-	void WDF::SaveWAS(uint32_t id)
+	void WDF::SaveWAS(uint32_t id,const char* path)
 	{
 		if (!mIdToPos.count(id))return;
 		Index index = mIndencies[mIdToPos[id]];
@@ -431,7 +506,7 @@ namespace NE {
 		file.seekg(wasOffset, ios::beg);
 		char* outfilec = new char[wasSize];
 		file.read(outfilec, wasSize);
-		std::fstream of(m_WDFDir.append("/" + std::to_string(id) + ".was"), ios::binary | ios::out);
+		std::fstream of(path, ios::binary | ios::out);
 		of.write(outfilec, wasSize);
 		of.close();
 		delete[] outfilec;
