@@ -78,6 +78,7 @@ namespace NE {
 
 	class WDF
 	{
+	public:
 		struct Header
 		{
 			//0x57444650:WDFP	0x57444658:WDFX		0x57444648:WDFH
@@ -96,20 +97,30 @@ namespace NE {
 			uint32_t spaces;
 		};
 
+		struct PalMatrix
+		{
+			uint16_t from;
+			uint16_t to;
+			std::vector<uint16_t> mat;
+		};
+
+
 	public:
 		WDF(std::string path);
+		~WDF();
 
 		void DataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen, int y, bool& copyline);
 
 		WAS GetWAS(uint32_t id);
 		void SaveWAS(uint32_t id, const char* path);
 
-		Sprite* LoadSprite(uint32_t id);
+		Sprite* LoadSprite(uint32_t id, std::vector<PalMatrix>* patMatrix = nullptr);
 		void UnLoadSprite(uint32_t id);
 
-		Sprite* LoadSpriteHeader(uint32_t id);
-		bool LoadSpriteData(Sprite* sprite);
+		Sprite* LoadSpriteHeader(uint32_t id, std::vector<PalMatrix>* patMatrix = nullptr);
+		bool LoadSpriteData(Sprite* sprite, std::vector<PalMatrix>* patMatrix = nullptr);
 
+		
 		std::vector<uint32_t> GetAllWASIDs()
 		{
 			std::vector<uint32_t> ids;
@@ -121,8 +132,7 @@ namespace NE {
 		}
 
 		std::vector<Sprite *> LoadAllSprite();
-
-		~WDF();
+		
 	public:
 		std::vector<Index> mIndencies;
 		std::map<uint32_t, uint32_t> mIdToPos;

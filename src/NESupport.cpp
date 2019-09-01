@@ -289,9 +289,11 @@ namespace NE {
 		{
 			m_Sprites.erase(it);
 		}
+		m_SpritesLoaded[id] = false;
+		m_SpritesLoading[id] = false;
 	}
 
-	Sprite* WDF::LoadSpriteHeader(uint32_t id)
+	Sprite* WDF::LoadSpriteHeader(uint32_t id, std::vector<PalMatrix>* patMatrix)
 	{
 		auto it = m_Sprites.find(id);
 		if (it != m_Sprites.end())
@@ -338,7 +340,7 @@ namespace NE {
 		return &sprite;
 	}
 
-	bool WDF::LoadSpriteData(Sprite* sprite)
+	bool WDF::LoadSpriteData(Sprite* sprite, std::vector<PalMatrix>* patMatrix)
 	{
 		if (sprite == nullptr) return false;
 		if (sprite->FrameLoaded)return true;
@@ -358,61 +360,15 @@ namespace NE {
 		int frameTotalSize = sprite->mFrameSize*sprite->mGroupSize;
 		MEM_READ_WITH_OFF(wasReadOff, &m_Palette16[0], wasMemData, 256 * 2);
 
-		for (int k = 0; k < 256; k++)
-		{
-			if (id == 1345628455) {
-				m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
-					52,65,0,
-					0,152,204,
-					129,101,125
-					});
-			}
-			else if (id == 1228435406 || id == 1425276052 || id == 2840575336) {
-				if (k <= 39) {
-					/*m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
-						220,220,512,
-						512,512,510,
-						512,510,512
-						});*/
-					/*m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
-						512,335,421,
-						0,0,0,
-						378,225,230
-						});*/
-
-					m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
-						0,0,0,
-						512,512,191,
-						325,0,0
-						});
-				}
-				else if (k <= 79) {
-					m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
-						211,211,230,
-						445,292,445,
-						306,306,206
-						});
-				}
-				else if (k <= 119) {
-					/*m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
-						0,0,0,
-						24,24,24,
-						19,19,19
-						});*/
-
-					m_Palette16[k] = ChangeColorPal(m_Palette16[k], {
-						100,72,144,
-						86,244,206,
-						100,201,72
-						});
-				}
-				else
-				{
-
+		if (patMatrix != nullptr&& patMatrix->size() != 0) {
+			for(auto& v : *patMatrix)
+			{
+				for (int i = v.from; i< v.to; i++) {
+					m_Palette16[i] = ChangeColorPal(m_Palette16[i], v.mat);
 				}
 			}
 		}
-
+		
 		for (int k = 0; k < 256; k++)
 		{
 			m_Palette32[k] = RGB565to888(m_Palette16[k], 0xff);	
@@ -488,10 +444,10 @@ namespace NE {
 		return &m_Sprites[id];
 	}
 
-	Sprite* WDF::LoadSprite(uint32_t id)
+	Sprite* WDF::LoadSprite(uint32_t id, std::vector<PalMatrix>* patMatrix)
 	{
 		Sprite* sprite = LoadSpriteHeader(id);
-		LoadSpriteData(sprite);
+		LoadSpriteData(sprite, patMatrix);
 		return sprite;
 	}
 
