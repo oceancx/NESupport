@@ -8,8 +8,25 @@
 #include <set>
 
 namespace NE {
+
+	enum EFileType
+	{
+		FILE_TYPE_UNKNOWN = 0,
+		FILE_TYPE_SPRITE,
+		FILE_TYPE_OGGS,
+		FILE_TYPE_RIFF,
+		FILE_TYPE_TEXT
+	};
+
 	using PalMat = std::vector<uint16_t>;
 	using PalMatVec = std::vector<PalMat>;
+
+	struct PalSchemePart
+	{
+		uint16_t from;
+		uint16_t to;
+		PalMat mat;
+	};
 
 	struct PalMatRef
 	{
@@ -31,33 +48,38 @@ namespace NE {
 		std::vector<PalSegment> schemes;
 	};
 
+	int check_file_type(char* data,size_t size);
+
 	struct Sprite
 	{
 		struct Sequence
 		{
-			int key_x;
-			int key_y;
-			int width;
-			int height;
-			uint32_t format;
+			int KeyX;
+			int KeyY;
+			int Width;
+			int Height;
+			uint32_t Format;
 
-			std::vector<uint32_t> src;
+			std::vector<uint32_t> Src;
 			bool IsBlank;
 		};
 
-		int mGroupSize;
-		int mFrameSize;
-		int mWidth;
-		int mHeight;
-		int mKeyX;
-		int mKeyY;
-		std::string mPalID;
-		std::string mID;
-		std::string mPath;
-		std::vector<Sequence> mFrames;
+		int PalIndex;
+		std::string PalID;
+		std::string ID;
+		std::string Path;
+		std::vector<Sequence> Frames;
 		void SaveImage(const char* filename,int index);
 		uint32_t FrameWASOffset;
 		bool FrameLoaded;
+
+		int GroupFrameCount;
+		int GroupCount;
+		int Width;
+		int Height;
+		int KeyX;
+		int KeyY;
+
 	};
 
 
@@ -67,22 +89,22 @@ namespace NE {
 
 		struct Header
 		{
-			uint16_t flag;		// SP 0x5053
-			uint16_t len;		// 12
-			int16_t group;
-			int16_t frame;
-			int16_t width;
-			int16_t height;
-			int16_t key_x;
-			int16_t key_y;
+			uint16_t Flag;
+			uint16_t Len;
+			int16_t GroupCount;
+			int16_t GroupFrameCount;
+			int16_t Width;
+			int16_t Height;
+			int16_t KeyX;
+			int16_t KeyY;
 		};
 
 		struct FrameHeader
 		{
-			int32_t key_x;
-			int32_t key_y;
-			int32_t width;
-			int32_t height;
+			int32_t KeyX;
+			int32_t KeyY;
+			int32_t Width;
+			int32_t Height;
 		};
 
 		WAS(std::string filename);
@@ -100,6 +122,7 @@ namespace NE {
 		std::string mPath;
 	};
 
+	
 	class WDF
 	{
 	public:
@@ -138,13 +161,12 @@ namespace NE {
 		WAS GetWAS(uint32_t id);
 		void SaveWAS(uint32_t id, const char* path);
 
-		Sprite* LoadSprite(uint32_t id, std::vector<PalMatrix>* patMatrix = nullptr);
+		Sprite* LoadSprite(uint32_t id, std::vector<PalSchemePart>* patMatrix = nullptr);
 		void UnLoadSprite(uint32_t id);
 
-		Sprite* LoadSpriteHeader(uint32_t id, std::vector<PalMatrix>* patMatrix = nullptr);
-		bool LoadSpriteData(Sprite* sprite, std::vector<PalMatrix>* patMatrix = nullptr);
+		Sprite* LoadSpriteHeader(uint32_t id, std::vector<PalSchemePart>* patMatrix = nullptr);
+		bool LoadSpriteData(Sprite* sprite, std::vector<PalSchemePart>* patMatrix = nullptr);
 
-		
 		std::vector<uint32_t> GetAllWASIDs()
 		{
 			std::vector<uint32_t> ids;
@@ -156,7 +178,14 @@ namespace NE {
 		}
 
 		std::vector<Sprite *> LoadAllSprite();
+
+		void LoadFileData(uint32_t id, uint8_t*& pData, size_t& size);
 		
+		
+		Sprite* UnpackSprite(uint32_t id, std::vector<PalSchemePart> pal);
+		/*void UnpackOggs(uint32_t id =0) {};
+		void UnpackRIFF(uint32_t id = 0) {};
+		void UnpackText(uint32_t id = 0) {};*/
 	public:
 		std::vector<Index> mIndencies;
 		std::map<uint32_t, uint32_t> mIdToPos;
@@ -340,5 +369,10 @@ namespace NE {
 
 		std::vector<std::vector<uint8_t>> m_CellData;
 	};
+
+	uint32_t RGB565to888(uint16_t color, uint8_t alpha);
+	uint8_t MixAlpha(uint8_t color, uint8_t alpha);
+	uint16_t ChangeColorPal(uint16_t color, std::vector<uint16_t> c);
+	uint16_t Alpha565(uint16_t Src, uint16_t Des, uint8_t Alpha);
 }
 using Sprite = NE::Sprite;

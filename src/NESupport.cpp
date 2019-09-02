@@ -6,6 +6,8 @@
 #include <memory>
 #include <cmath>
 #include <string>
+#include <sstream>
+#include <assert.h>
 using std::cerr;
 using std::endl;
 using std::ios;
@@ -36,6 +38,188 @@ struct TGA_FILE_HEADER
 #endif
 
 namespace NE {
+
+
+	void SpriteDataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen, int y, bool& copyline, uint16_t*m_Palette16, uint32_t* m_Palette32)
+	{
+		uint32_t Pixels = pixelOffset;
+		uint32_t PixelLen = pixelLen;
+		uint16_t AlphaPixel = 0;
+
+		while (pData && *pData != 0) // {00000000} 表示像素行结束，如有剩余像素用透明色代替
+		{
+			uint8_t style = 0;
+			uint8_t Level = 0; // Alpha层数
+			uint8_t Repeat = 0; // 重复次数
+			style = (*pData & 0xc0) >> 6;  // 取字节的前两个比特
+			switch (style)
+			{
+			case 0: // {00******}
+				if (copyline&&y == 1)
+				{
+					copyline = false;
+				}
+				if (*pData & 0x20) // {001*****} 表示带有Alpha通道的单个像素
+				{
+					// {001 +5bit Alpha}+{1Byte Index}, 表示带有Alpha通道的单个像素。
+					// {001 +0~31层Alpha通道}+{1~255个调色板引索}
+					Level = (*pData) & 0x1f; // 0x1f=(11111) 获得Alpha通道的值
+					pData++; // 下一个字节
+					if (Pixels < PixelLen)
+					{
+						AlphaPixel = NE::Alpha565(m_Palette16[(uint8_t)(*pData)], 0, Level);  // 混合
+						*pBmpStart++ = NE::RGB565to888(AlphaPixel, Level * 8);
+						Pixels++;
+						pData++;
+					}
+				}
+				else // {000*****} 表示重复n次带有Alpha通道的像素
+				{
+					// {000 +5bit Times}+{1Byte Alpha}+{1Byte Index}, 表示重复n次带有Alpha通道的像素。
+					// {000 +重复1~31次}+{0~255层Alpha通道}+{1~255个调色板引索}
+					// 注: 这里的{00000000} 保留给像素行结束使用，所以只可以重复1~31次。
+					Repeat = (*pData) & 0x1f; // 获得重复的次数
+					pData++;
+					Level = *pData; // 获得Alpha通道值
+					pData++;
+					for (int i = 1; i <= Repeat; i++)
+					{
+						if (Pixels < PixelLen)
+						{
+							AlphaPixel = NE::Alpha565(m_Palette16[(uint8_t)*pData], 0, Level); // ???
+							*pBmpStart++ = NE::RGB565to888(AlphaPixel, Level * 8);
+							Pixels++;
+						}
+					}
+					pData++;
+				}
+				break;
+			case 1:
+				// {01******} 表示不带Alpha通道不重复的n个像素组成的数据段
+				// {01  +6bit Times}+{nByte Datas},表示不带Alpha通道不重复的n个像素组成的数据段。
+				// {01  +1~63个长度}+{n个字节的数据},{01000000}保留。
+				if (copyline&&y == 1)
+				{
+					copyline = false;
+				}
+				Repeat = (*pData) & 0x3f; // 获得数据组中的长度
+				pData++;
+				for (int i = 1; i <= Repeat; i++)
+				{
+					if (Pixels < PixelLen)
+					{
+						*pBmpStart++ = m_Palette32[(uint8_t)*pData];
+						Pixels++;
+						pData++;
+					}
+				}
+				break;
+			case 2:
+				// {10******} 表示重复n次像素
+				// {10  +6bit Times}+{1Byte Index}, 表示重复n次像素。
+				// {10  +重复1~63次}+{0~255个调色板引索},{10000000}保留。
+				if (copyline&&y == 1)
+				{
+					copyline = false;
+				}
+				Repeat = (*pData) & 0x3f; // 获得重复的次数
+				pData++;
+				for (int i = 1; i <= Repeat; i++)
+				{
+					if (Pixels < PixelLen)
+					{
+						*pBmpStart++ = m_Palette32[(uint8_t)*pData];
+						Pixels++;
+					}
+				}
+				pData++;
+				break;
+			case 3:
+				// {11******} 表示跳过n个像素，跳过的像素用透明色代替
+				// {11  +6bit Times}, 表示跳过n个像素，跳过的像素用透明色代替。
+				// {11  +跳过1~63个像素},{11000000}保留。
+				Repeat = (*pData) & 0x3f; // 获得重复次数
+				for (int i = 1; i <= Repeat; i++)
+				{
+					if (Pixels < PixelLen)
+					{
+						pBmpStart++;
+						Pixels++;
+					}
+				}
+				pData++;
+				break;
+			default: // 一般不存在这种情况
+				printf("Error!\n");
+				break;
+			}
+		}
+		if (*pData == 0 && PixelLen > Pixels)
+		{
+			uint32_t Repeat = 0;
+			Repeat = PixelLen - Pixels;
+			for (uint32_t i = 0; i < Repeat; i++)
+			{
+				if (Pixels < PixelLen)
+				{
+					pBmpStart++;
+					Pixels++;
+				}
+			}
+		}
+	}
+
+	void UtilsSaveImageFile(const char* filename, int width, int height, int pixelDepth, char* data)
+	{
+		TGA_FILE_HEADER TgaHeader;
+		memset(&TgaHeader, 0, 18);
+		TgaHeader.IdLength = 0;
+		TgaHeader.ColorMapType = 0;
+		TgaHeader.ImageType = 0x02;
+		TgaHeader.ColorMapFirstIndex = 0;
+		TgaHeader.ColorMapLength = 0;
+		TgaHeader.ColorMapEntrySize = 0;
+		TgaHeader.XOrigin = 0;
+		TgaHeader.YOrigin = 0;
+		TgaHeader.ImageWidth = width;
+		TgaHeader.ImageHeight = height;
+		TgaHeader.PixelDepth = pixelDepth;
+		TgaHeader.ImageDescruptor = 8;
+
+		std::fstream ofile;
+		ofile.open(filename, ios::out | ios::trunc | ios::binary);
+		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
+		ofile.write((char*)data, width*height*pixelDepth / 8);
+		ofile.close();
+	}
+
+	int check_file_type(char* data, size_t size)
+	{
+		bool predict_text = strlen(data) == size;
+		uint32_t flag = 0;
+		memcpy((char*)&flag, data, 4);
+		if (flag == 'SggO') {
+			printf("read mp3 file\n");
+			return FILE_TYPE_OGGS;
+		}
+		else if (flag == 'FFIR') {
+			printf("read wav file\n");
+			return FILE_TYPE_RIFF;
+		}
+		else if ((flag & 0xffff) == 'PS')
+		{
+			printf("read sp file\n");
+			return FILE_TYPE_SPRITE;
+		}else{
+			if(predict_text){
+				printf("read txt file\n");
+				return FILE_TYPE_TEXT;
+			}else{
+				printf("read unknown file\n");
+				return FILE_TYPE_UNKNOWN;
+			}
+		}
+	}
 
 
 	uint8_t MixAlpha(uint8_t color, uint8_t alpha)
@@ -120,7 +304,7 @@ namespace NE {
 
 	void Sprite::SaveImage(const char* filename, int index)
 	{
-		Sequence& sq = mFrames[index];
+		Sequence& sq = Frames[index];
 
 		TGA_FILE_HEADER TgaHeader;
 		memset(&TgaHeader, 0, 18);
@@ -133,20 +317,20 @@ namespace NE {
 		TgaHeader.ColorMapEntrySize = 0;
 		TgaHeader.XOrigin = 0;
 		TgaHeader.YOrigin = 0;
-		TgaHeader.ImageWidth = sq.width;
-		TgaHeader.ImageHeight = sq.height;
+		TgaHeader.ImageWidth = sq.Width;
+		TgaHeader.ImageHeight = sq.Height;
 		TgaHeader.PixelDepth = 24;
 		TgaHeader.ImageDescruptor = 8;
 		std::ofstream ofile(filename, std::ios::out | std::ios::trunc | std::ios::binary);
 		if (!ofile)return;
 
-		uint8_t* img_data = new uint8_t[sq.src.size() * 3];
-		for (int row = 0; row < sq.height; row++) {
-			for (int col = 0; col < sq.width; col++) {
-				int fliprow = sq.height-1 - row;
-				int i = fliprow * sq.width + col;
-				int datai = row * sq.width + col;
-				uint32_t pix = sq.src[i];
+		uint8_t* img_data = new uint8_t[sq.Src.size() * 3];
+		for (int row = 0; row < sq.Height; row++) {
+			for (int col = 0; col < sq.Width; col++) {
+				int fliprow = sq.Height-1 - row;
+				int i = fliprow * sq.Width + col;
+				int datai = row * sq.Width + col;
+				uint32_t pix = sq.Src[i];
 				img_data[datai * 3] = (pix & 0xff0000) >> 16;
 				img_data[datai * 3 + 1] = (pix & 0xff00) >> 8;
 				img_data[datai * 3 + 2] = pix & 0xff;
@@ -154,7 +338,7 @@ namespace NE {
 		}
 		
 		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
-		ofile.write((char*)img_data, sq.src.size() * 3);
+		ofile.write((char*)img_data, sq.Src.size() * 3);
 		delete[] img_data;
 		img_data = nullptr;
 		ofile.close();
@@ -172,7 +356,7 @@ namespace NE {
 		if (!infile) return;
 		infile.seekg(offset, ios::beg);
 		infile.read((char*)&mHeader, sizeof(mHeader));
-		if (mHeader.flag != 0x5053)
+		if (mHeader.Flag != 0x5053)
 		{
 			cerr << "Sprite File Flag Error!" << endl;
 			infile.close();
@@ -188,7 +372,7 @@ namespace NE {
 			mPalette32[i] = RGB565to888(palette16[i], 0xff);
 		}
 
-		int frames = mHeader.group * mHeader.frame;
+		int frames = mHeader.GroupCount * mHeader.GroupFrameCount;
 		mFrameIndecies.resize(frames);
 		infile.read((char*)mFrameIndecies.data(), frames * 4);
 		infile.close();
@@ -293,7 +477,7 @@ namespace NE {
 		m_SpritesLoading[id] = false;
 	}
 
-	Sprite* WDF::LoadSpriteHeader(uint32_t id, std::vector<PalMatrix>* patMatrix)
+	Sprite* WDF::LoadSpriteHeader(uint32_t id, std::vector<PalSchemePart>* patMatrix)
 	{
 		auto it = m_Sprites.find(id);
 		if (it != m_Sprites.end())
@@ -310,15 +494,15 @@ namespace NE {
 		WAS::Header header{ 0 };
 		MEM_READ_WITH_OFF(wasReadOff, &header, wasMemData, sizeof(header));
 
-		if (header.flag != 0x5053)
+		if (header.Flag != 0x5053)
 		{
 			std::cerr << "Sprite File Flag Error!" << endl;
 			return nullptr;
 		}
 
-		if (header.len > 12)
+		if (header.Len > 12)
 		{
-			int addonHeadLen = header.len - 12;
+			int addonHeadLen = header.Len - 12;
 			uint8_t* m_AddonHead = new uint8_t[addonHeadLen];
 			MEM_READ_WITH_OFF(wasReadOff, m_AddonHead, wasMemData, addonHeadLen);
 			delete[] m_AddonHead;
@@ -327,25 +511,23 @@ namespace NE {
 		Sprite&  sprite = m_Sprites[id];
 		sprite.FrameLoaded = false;
 		sprite.FrameWASOffset = wasReadOff;
-		sprite.mID = std::to_string(id);
-		sprite.mPath = m_FileName + "/" + sprite.mID;
-		sprite.mGroupSize = header.group;
-		sprite.mFrameSize = header.frame;
-		sprite.mWidth = header.width;
-		sprite.mHeight = header.height;
-		sprite.mWidth = std::max(0, sprite.mWidth);
-		sprite.mHeight = std::max(0, sprite.mHeight);
-		sprite.mKeyX = header.key_x;
-		sprite.mKeyY = header.key_y;
+		sprite.ID = std::to_string(id);
+		sprite.Path = m_FileName + "/" + sprite.ID;
+		sprite.GroupCount= header.GroupCount;
+		sprite.GroupFrameCount = header.GroupFrameCount;
+		sprite.Width= header.Width;
+		sprite.Height= header.Height;
+		sprite.KeyX= header.KeyX;
+		sprite.KeyY= header.KeyX;
 		return &sprite;
 	}
 
-	bool WDF::LoadSpriteData(Sprite* sprite, std::vector<PalMatrix>* patMatrix)
+	bool WDF::LoadSpriteData(Sprite* sprite, std::vector<PalSchemePart>* patMatrix)
 	{
 		if (sprite == nullptr) return false;
 		if (sprite->FrameLoaded)return true;
 
-		uint32_t id = std::stoul(sprite->mID);
+		uint32_t id = std::stoul(sprite->ID);
 
 		if (m_SpritesLoaded[id]) return &m_Sprites[id];
 
@@ -357,7 +539,7 @@ namespace NE {
 
 		auto& wasMemData = m_FileData;
 		uint32_t wasReadOff = sprite->FrameWASOffset;
-		int frameTotalSize = sprite->mFrameSize*sprite->mGroupSize;
+		int frameTotalSize = sprite->GroupFrameCount*sprite->GroupCount;
 		MEM_READ_WITH_OFF(wasReadOff, &m_Palette16[0], wasMemData, 256 * 2);
 
 		if (patMatrix != nullptr&& patMatrix->size() != 0) {
@@ -377,7 +559,7 @@ namespace NE {
 		std::vector<uint32_t> frameIndexes(frameTotalSize, 0);
 		MEM_READ_WITH_OFF(wasReadOff, frameIndexes.data(), wasMemData, frameTotalSize * 4);
 
-		sprite->mFrames.resize(frameTotalSize);
+		sprite->Frames.resize(frameTotalSize);
 
 		for (int i = 0; i < frameTotalSize; i++)
 		{
@@ -385,7 +567,7 @@ namespace NE {
 			WAS::FrameHeader wasFrameHeader{ 0 };
 			MEM_READ_WITH_OFF(wasReadOff, &wasFrameHeader, wasMemData, sizeof(WAS::FrameHeader));
 
-			if (wasFrameHeader.height >= (1 << 15) || wasFrameHeader.width >= (1 << 15) || wasFrameHeader.height < 0 || wasFrameHeader.width < 0)
+			if (wasFrameHeader.Height>= (1 << 15) || wasFrameHeader.Width >= (1 << 15) || wasFrameHeader.Height < 0 || wasFrameHeader.Width < 0)
 			{
 				std::cerr << "wasFrameHeader error!!!" << std::endl;
 				m_SpritesLoading[id] = false;
@@ -393,42 +575,42 @@ namespace NE {
 				return nullptr;
 			}
 
-			Sprite::Sequence& frame = sprite->mFrames[i];
-			frame.key_x = wasFrameHeader.key_x;
-			frame.key_y = wasFrameHeader.key_y;
-			frame.width = wasFrameHeader.width;
-			frame.height = wasFrameHeader.height;
-			uint32_t pixels = frame.width*frame.height;
-			frame.src.resize(pixels, 0);
+			Sprite::Sequence& frame = sprite->Frames[i];
+			frame.KeyX = wasFrameHeader.KeyX;
+			frame.KeyY= wasFrameHeader.KeyY;
+			frame.Width = wasFrameHeader.Width;
+			frame.Height = wasFrameHeader.Height;
+			uint32_t pixels = frame.Width*frame.Height;
+			frame.Src.resize(pixels, 0);
 
-			std::vector<uint32_t> frameLine(frame.height, 0);
-			MEM_READ_WITH_OFF(wasReadOff, frameLine.data(), wasMemData, frame.height * 4);
+			std::vector<uint32_t> frameLine(frame.Height, 0);
+			MEM_READ_WITH_OFF(wasReadOff, frameLine.data(), wasMemData, frame.Height * 4);
 
 			uint32_t* pBmpStart = nullptr;
 			bool copyLine = true;
-			for (int j = 0; j < frame.height; j++)
+			for (int j = 0; j < frame.Height; j++)
 			{
 				uint32_t lineDataPos = sprite->FrameWASOffset  + frameIndexes[i] + frameLine[j];
 				uint8_t* lineData = m_FileData.data() + lineDataPos;
-				pBmpStart = frame.src.data() + frame.width*(j);
-				int pixelLen = frame.width;
+				pBmpStart = frame.Src.data() + frame.Width*(j);
+				int pixelLen = frame.Width;
 				DataHandler(lineData, pBmpStart, 0, pixelLen, j, copyLine);
 			}
 
 			if (copyLine)
 			{
-				for (int j = 0; j + 1 < frame.height; j += 2)
+				for (int j = 0; j + 1 < frame.Height; j += 2)
 				{
-					uint32_t* pDst = &frame.src[(j + 1)*frame.width];
-					uint32_t* pSrc = &frame.src[j*frame.width];
-					memcpy((uint8_t*)pDst, (uint8_t*)pSrc, frame.width * 4);
+					uint32_t* pDst = &frame.Src[(j + 1)*frame.Width];
+					uint32_t* pSrc = &frame.Src[j*frame.Width];
+					memcpy((uint8_t*)pDst, (uint8_t*)pSrc, frame.Width * 4);
 				}
 			}
 
 			frame.IsBlank = true;
 			for (uint32_t pix = 0; pix < pixels; pix++)
 			{
-				if (frame.src[pix] != 0)
+				if (frame.Src[pix] != 0)
 				{
 					// std::cerr <<frame.src[xx] << std::endl;
 					frame.IsBlank = false;
@@ -444,14 +626,143 @@ namespace NE {
 		return &m_Sprites[id];
 	}
 
-	Sprite* WDF::LoadSprite(uint32_t id, std::vector<PalMatrix>* patMatrix)
+	Sprite* WDF::LoadSprite(uint32_t id, std::vector<PalSchemePart>* patMatrix)
 	{
 		Sprite* sprite = LoadSpriteHeader(id);
 		LoadSpriteData(sprite, patMatrix);
 		return sprite;
 	}
 
-	void WDF::SaveWAS(uint32_t id,const char* path)
+	Sprite* WDF::UnpackSprite(uint32_t id, std::vector<PalSchemePart> pal)
+	{
+
+		Index index = mIndencies[mIdToPos[id]];
+		char* data = (char*)(m_FileData.data() + index.offset);
+		size_t size = index.size;
+		assert(check_file_type(data, size) == FILE_TYPE_SPRITE);
+		std::string s(data, size);
+		std::stringstream ss(s);
+		
+		WAS::Header header;
+		ss.read((char*)&header, sizeof(header));
+		if (header.Len > 12) {
+			int addonHeadLen = header.Len - 12;
+			ss.seekg(addonHeadLen, std::ios::cur);
+			printf("was header over 12!");
+		}
+		Sprite* sprite = new Sprite();
+		sprite->GroupFrameCount = header.GroupFrameCount;
+		sprite->GroupCount = header.GroupCount;
+		sprite->KeyX = header.KeyX;
+		sprite->KeyY = header.KeyY;
+		sprite->Width = header.Width;
+		sprite->Height = header.Height;
+
+		size_t readHeaderLen = ss.tellg();
+		uint16_t m_Palette16[256];
+		ss.read((char*)m_Palette16, sizeof(m_Palette16));
+
+		if (pal.size() != 0) {
+			for (auto& v : pal)
+			{
+				for (int i = v.from; i < v.to; i++) {
+					m_Palette16[i] = ChangeColorPal(m_Palette16[i], v.mat);
+				}
+			}
+		}
+
+		uint32_t m_Palette32[256];
+		for (int k = 0; k < 256; k++)
+		{
+			m_Palette32[k] = NE::RGB565to888(m_Palette16[k], 0xff);
+		}
+
+		int frameTotalSize = header.GroupFrameCount*header.GroupCount;
+		std::vector<uint32_t> frameIndexes(frameTotalSize, 0);
+		ss.read((char*)frameIndexes.data(), frameIndexes.size() * sizeof(uint32_t));
+		sprite->Frames.resize(frameTotalSize);
+		for (int i = 0; i < frameTotalSize; i++)
+		{
+			size_t was_off = readHeaderLen + frameIndexes[i];
+			ss.seekg(was_off, std::ios::beg);
+
+			WAS::FrameHeader frameHeader{ 0 };
+			ss.read((char*)&frameHeader, sizeof(frameHeader));
+
+			if (frameHeader.Height >= (1 << 15) || frameHeader.Width >= (1 << 15) || frameHeader.Height < 0 || frameHeader.Width < 0)
+			{
+				printf("read frame header exception");
+				continue;
+			}
+			Sprite::Sequence& frame = sprite->Frames[i];
+			frame.KeyX = frameHeader.KeyX;
+			frame.KeyY = frameHeader.KeyY;
+			frame.Width = frameHeader.Width;
+			frame.Height = frameHeader.Height;
+
+			int32_t fWidth = frameHeader.Width;
+			int32_t fHeight = frameHeader.Height;
+			uint32_t pixels = fWidth * fHeight;
+			frame.Src.resize(pixels, 0);
+			std::vector<uint32_t>& bitmap = frame.Src;
+
+			std::vector<uint32_t> frameLine(fHeight, 0);
+			ss.read((char*)frameLine.data(), frameLine.size() * sizeof(uint32_t));
+			uint32_t* pBmpStart = nullptr;
+			bool copyLine = true;
+			for (int j = 0; j < fHeight; j++)
+			{
+				uint32_t lineDataPos = frameLine[j];
+				size_t linelen = 0;
+				if (j < fHeight - 1) {
+					linelen = frameLine[j + 1] - frameLine[j];
+				}
+				else {
+					if (i < frameTotalSize - 1) {
+						linelen = frameIndexes[i + 1] - frameIndexes[i] - frameLine[j];
+					}
+					else {
+						linelen = size - readHeaderLen - frameIndexes[i] - frameLine[j];
+					}
+				}
+				std::vector<uint8_t> lineData(linelen, 0);
+				ss.seekg(was_off + lineDataPos, std::ios::beg);
+				ss.read((char*)lineData.data(), linelen);
+
+				pBmpStart = bitmap.data() + fWidth * (j);
+				int pixelLen = fWidth;
+				SpriteDataHandler(lineData.data(), pBmpStart, 0, pixelLen, j, copyLine, m_Palette16, m_Palette32);
+			}
+
+			if (copyLine)
+			{
+				for (int j = 0; j + 1 < fHeight; j += 2)
+				{
+					uint32_t* pDst = &bitmap[(j + 1)*fWidth];
+					uint32_t* pSrc = &bitmap[j*fWidth];
+					memcpy((uint8_t*)pDst, (uint8_t*)pSrc, fWidth * 4);
+				}
+			}
+
+			frame.IsBlank = true;
+			for (uint32_t pix = 0; pix < pixels; pix++)
+			{
+				if (bitmap[pix] != 0)
+				{
+					frame.IsBlank = false;
+					break;
+				}
+			}
+
+			/*printf("sprite is blank %d\n", frame.IsBlank);
+			std::string path("e:/Github/SimpleEngine/");
+			path = path + std::to_string(i) + ".tga";
+			UtilsSaveImageFile(path.c_str(), fWidth, fHeight, 32, (char*)bitmap.data());*/
+		}
+		return sprite;
+	}
+
+	void WDF::SaveWAS(uint32_t id, const char* path)
 	{
 		if (!mIdToPos.count(id))return;
 		Index index = mIndencies[mIdToPos[id]];
@@ -484,133 +795,20 @@ namespace NE {
 	}
 
 
+	void WDF::LoadFileData(uint32_t id, uint8_t*& pData, size_t& size)
+	{
+		int pos = mIdToPos[id];
+		assert(pos < mIndencies.size());
+		Index index = mIndencies[pos];
+		auto& wasMemData = m_FileData;
+		uint32_t wasReadOff = index.offset;
+		pData = m_FileData.data() + wasReadOff;
+		size = index.size;
+	}
+
 	void WDF::DataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen, int y, bool& copyline)
 	{
-		uint32_t Pixels = pixelOffset;
-		uint32_t PixelLen = pixelLen;
-		uint16_t AlphaPixel = 0;
-
-		while (pData && *pData != 0) // {00000000} 表示像素行结束，如有剩余像素用透明色代替
-		{
-			uint8_t style = 0;
-			uint8_t Level = 0; // Alpha层数
-			uint8_t Repeat = 0; // 重复次数
-			style = (*pData & 0xc0) >> 6;  // 取字节的前两个比特
-			switch (style)
-			{
-			case 0: // {00******}
-				if (copyline&&y == 1)
-				{
-					copyline = false;
-				}
-				if (*pData & 0x20) // {001*****} 表示带有Alpha通道的单个像素
-				{
-					// {001 +5bit Alpha}+{1Byte Index}, 表示带有Alpha通道的单个像素。
-					// {001 +0~31层Alpha通道}+{1~255个调色板引索}
-					Level = (*pData) & 0x1f; // 0x1f=(11111) 获得Alpha通道的值
-					pData++; // 下一个字节
-					if (Pixels < PixelLen)
-					{
-						AlphaPixel = Alpha565(m_Palette16[(uint8_t)(*pData)], 0, Level);  // 混合
-						*pBmpStart++ = RGB565to888(AlphaPixel, Level * 8);
-						Pixels++;
-						pData++;
-					}
-				}
-				else // {000*****} 表示重复n次带有Alpha通道的像素
-				{
-					// {000 +5bit Times}+{1Byte Alpha}+{1Byte Index}, 表示重复n次带有Alpha通道的像素。
-					// {000 +重复1~31次}+{0~255层Alpha通道}+{1~255个调色板引索}
-					// 注: 这里的{00000000} 保留给像素行结束使用，所以只可以重复1~31次。
-					Repeat = (*pData) & 0x1f; // 获得重复的次数
-					pData++;
-					Level = *pData; // 获得Alpha通道值
-					pData++;
-					for (int i = 1; i <= Repeat; i++)
-					{
-						if (Pixels < PixelLen)
-						{
-							AlphaPixel = Alpha565(m_Palette16[(uint8_t)*pData], 0, Level); // ???
-							*pBmpStart++ = RGB565to888(AlphaPixel, Level * 8);
-							Pixels++;
-						}
-					}
-					pData++;
-				}
-				break;
-			case 1:
-				// {01******} 表示不带Alpha通道不重复的n个像素组成的数据段
-				// {01  +6bit Times}+{nByte Datas},表示不带Alpha通道不重复的n个像素组成的数据段。
-				// {01  +1~63个长度}+{n个字节的数据},{01000000}保留。
-				if (copyline&&y == 1)
-				{
-					copyline = false;
-				}
-				Repeat = (*pData) & 0x3f; // 获得数据组中的长度
-				pData++;
-				for (int i = 1; i <= Repeat; i++)
-				{
-					if (Pixels < PixelLen)
-					{
-						*pBmpStart++ = m_Palette32[(uint8_t)*pData];
-						Pixels++;
-						pData++;
-					}
-				}
-				break;
-			case 2:
-				// {10******} 表示重复n次像素
-				// {10  +6bit Times}+{1Byte Index}, 表示重复n次像素。
-				// {10  +重复1~63次}+{0~255个调色板引索},{10000000}保留。
-				if (copyline&&y == 1)
-				{
-					copyline = false;
-				}
-				Repeat = (*pData) & 0x3f; // 获得重复的次数
-				pData++;
-				for (int i = 1; i <= Repeat; i++)
-				{
-					if (Pixels < PixelLen)
-					{
-						*pBmpStart++ = m_Palette32[(uint8_t)*pData];
-						Pixels++;
-					}
-				}
-				pData++;
-				break;
-			case 3:
-				// {11******} 表示跳过n个像素，跳过的像素用透明色代替
-				// {11  +6bit Times}, 表示跳过n个像素，跳过的像素用透明色代替。
-				// {11  +跳过1~63个像素},{11000000}保留。
-				Repeat = (*pData) & 0x3f; // 获得重复次数
-				for (int i = 1; i <= Repeat; i++)
-				{
-					if (Pixels < PixelLen)
-					{
-						pBmpStart++;
-						Pixels++;
-					}
-				}
-				pData++;
-				break;
-			default: // 一般不存在这种情况
-				cerr << "Error!" << endl;
-				break;
-			}
-		}
-		if (*pData == 0 && PixelLen > Pixels)
-		{
-			uint32_t Repeat = 0;
-			Repeat = PixelLen - Pixels;
-			for (uint32_t i = 0; i < Repeat; i++)
-			{
-				if (Pixels < PixelLen)
-				{
-					pBmpStart++;
-					Pixels++;
-				}
-			}
-		}
+		SpriteDataHandler(pData, pBmpStart, pixelOffset, pixelLen, y, copyline, m_Palette16, m_Palette32);
 	}
 
 	MAP::MAP(std::string filename) :m_FileName(filename)
@@ -903,7 +1101,6 @@ namespace NE {
 				*outBuffer++ = 0xC4;
 				Buffer++;
 				TempNum++;
-
 				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // 读取长度
 				ByteSwap(TempTimes); // 将长度转换为Intel顺序
 
@@ -1197,6 +1394,5 @@ namespace NE {
 			}
 			//printf("\n");
 		}
-
 	}
 }
