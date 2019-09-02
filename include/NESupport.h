@@ -8,6 +8,29 @@
 #include <set>
 
 namespace NE {
+	using PalMat = std::vector<uint16_t>;
+	using PalMatVec = std::vector<PalMat>;
+
+	struct PalMatRef
+	{
+		uint8_t seg;
+		uint8_t mat_i;
+	};
+
+	struct PalSegment
+	{
+		uint8_t from;
+		uint8_t to;
+		PalMatVec mat;
+	};
+
+	struct PalSchemes
+	{
+		uint32_t pack;
+		uint32_t wasid;
+		std::vector<PalSegment> schemes;
+	};
+
 	struct Sprite
 	{
 		struct Sequence
@@ -28,6 +51,7 @@ namespace NE {
 		int mHeight;
 		int mKeyX;
 		int mKeyY;
+		std::string mPalID;
 		std::string mID;
 		std::string mPath;
 		std::vector<Sequence> mFrames;
