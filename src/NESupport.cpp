@@ -26,7 +26,7 @@ struct TGA_FILE_HEADER
 	uint8_t ImageType;				// 2 or 10
 	uint16_t ColorMapFirstIndex;	
 	uint16_t ColorMapLength;		
-	uint8_t ColorMapEntrySize;		// (default:0ï¼Œsupport 16/24/32)
+	uint8_t ColorMapEntrySize;		// (default:0£¬support 16/24/32)
 	uint16_t XOrigin;				
 	uint16_t YOrigin;				
 	uint16_t ImageWidth;			
@@ -46,12 +46,12 @@ namespace NE {
 		uint32_t PixelLen = pixelLen;
 		uint16_t AlphaPixel = 0;
 
-		while (pData && *pData != 0) // {00000000} è¡¨ç¤ºåƒç´ è¡Œç»“æŸï¼Œå¦‚æœ‰å‰©ä½™åƒç´ ç”¨é€æ˜è‰²ä»£æ›¿
+		while (pData && *pData != 0) // {00000000} ±íÊ¾ÏñËØĞĞ½áÊø£¬ÈçÓĞÊ£ÓàÏñËØÓÃÍ¸Ã÷É«´úÌæ
 		{
 			uint8_t style = 0;
-			uint8_t Level = 0; // Alphaå±‚æ•°
-			uint8_t Repeat = 0; // é‡å¤æ¬¡æ•°
-			style = (*pData & 0xc0) >> 6;  // å–å­—èŠ‚çš„å‰ä¸¤ä¸ªæ¯”ç‰¹
+			uint8_t Level = 0; // Alpha²ãÊı
+			uint8_t Repeat = 0; // ÖØ¸´´ÎÊı
+			style = (*pData & 0xc0) >> 6;  // È¡×Ö½ÚµÄÇ°Á½¸ö±ÈÌØ
 			switch (style)
 			{
 			case 0: // {00******}
@@ -59,28 +59,28 @@ namespace NE {
 				{
 					copyline = false;
 				}
-				if (*pData & 0x20) // {001*****} è¡¨ç¤ºå¸¦æœ‰Alphaé€šé“çš„å•ä¸ªåƒç´ 
+				if (*pData & 0x20) // {001*****} ±íÊ¾´øÓĞAlphaÍ¨µÀµÄµ¥¸öÏñËØ
 				{
-					// {001 +5bit Alpha}+{1Byte Index}, è¡¨ç¤ºå¸¦æœ‰Alphaé€šé“çš„å•ä¸ªåƒç´ ã€‚
-					// {001 +0~31å±‚Alphaé€šé“}+{1~255ä¸ªè°ƒè‰²æ¿å¼•ç´¢}
-					Level = (*pData) & 0x1f; // 0x1f=(11111) è·å¾—Alphaé€šé“çš„å€¼
-					pData++; // ä¸‹ä¸€ä¸ªå­—èŠ‚
+					// {001 +5bit Alpha}+{1Byte Index}, ±íÊ¾´øÓĞAlphaÍ¨µÀµÄµ¥¸öÏñËØ¡£
+					// {001 +0~31²ãAlphaÍ¨µÀ}+{1~255¸öµ÷É«°åÒıË÷}
+					Level = (*pData) & 0x1f; // 0x1f=(11111) »ñµÃAlphaÍ¨µÀµÄÖµ
+					pData++; // ÏÂÒ»¸ö×Ö½Ú
 					if (Pixels < PixelLen)
 					{
-						AlphaPixel = NE::Alpha565(m_Palette16[(uint8_t)(*pData)], 0, Level);  // æ··åˆ
+						AlphaPixel = NE::Alpha565(m_Palette16[(uint8_t)(*pData)], 0, Level);  // »ìºÏ
 						*pBmpStart++ = NE::RGB565to888(AlphaPixel, Level * 8);
 						Pixels++;
 						pData++;
 					}
 				}
-				else // {000*****} è¡¨ç¤ºé‡å¤næ¬¡å¸¦æœ‰Alphaé€šé“çš„åƒç´ 
+				else // {000*****} ±íÊ¾ÖØ¸´n´Î´øÓĞAlphaÍ¨µÀµÄÏñËØ
 				{
-					// {000 +5bit Times}+{1Byte Alpha}+{1Byte Index}, è¡¨ç¤ºé‡å¤næ¬¡å¸¦æœ‰Alphaé€šé“çš„åƒç´ ã€‚
-					// {000 +é‡å¤1~31æ¬¡}+{0~255å±‚Alphaé€šé“}+{1~255ä¸ªè°ƒè‰²æ¿å¼•ç´¢}
-					// æ³¨: è¿™é‡Œçš„{00000000} ä¿ç•™ç»™åƒç´ è¡Œç»“æŸä½¿ç”¨ï¼Œæ‰€ä»¥åªå¯ä»¥é‡å¤1~31æ¬¡ã€‚
-					Repeat = (*pData) & 0x1f; // è·å¾—é‡å¤çš„æ¬¡æ•°
+					// {000 +5bit Times}+{1Byte Alpha}+{1Byte Index}, ±íÊ¾ÖØ¸´n´Î´øÓĞAlphaÍ¨µÀµÄÏñËØ¡£
+					// {000 +ÖØ¸´1~31´Î}+{0~255²ãAlphaÍ¨µÀ}+{1~255¸öµ÷É«°åÒıË÷}
+					// ×¢: ÕâÀïµÄ{00000000} ±£Áô¸øÏñËØĞĞ½áÊøÊ¹ÓÃ£¬ËùÒÔÖ»¿ÉÒÔÖØ¸´1~31´Î¡£
+					Repeat = (*pData) & 0x1f; // »ñµÃÖØ¸´µÄ´ÎÊı
 					pData++;
-					Level = *pData; // è·å¾—Alphaé€šé“å€¼
+					Level = *pData; // »ñµÃAlphaÍ¨µÀÖµ
 					pData++;
 					for (int i = 1; i <= Repeat; i++)
 					{
@@ -95,14 +95,14 @@ namespace NE {
 				}
 				break;
 			case 1:
-				// {01******} è¡¨ç¤ºä¸å¸¦Alphaé€šé“ä¸é‡å¤çš„nä¸ªåƒç´ ç»„æˆçš„æ•°æ®æ®µ
-				// {01  +6bit Times}+{nByte Datas},è¡¨ç¤ºä¸å¸¦Alphaé€šé“ä¸é‡å¤çš„nä¸ªåƒç´ ç»„æˆçš„æ•°æ®æ®µã€‚
-				// {01  +1~63ä¸ªé•¿åº¦}+{nä¸ªå­—èŠ‚çš„æ•°æ®},{01000000}ä¿ç•™ã€‚
+				// {01******} ±íÊ¾²»´øAlphaÍ¨µÀ²»ÖØ¸´µÄn¸öÏñËØ×é³ÉµÄÊı¾İ¶Î
+				// {01  +6bit Times}+{nByte Datas},±íÊ¾²»´øAlphaÍ¨µÀ²»ÖØ¸´µÄn¸öÏñËØ×é³ÉµÄÊı¾İ¶Î¡£
+				// {01  +1~63¸ö³¤¶È}+{n¸ö×Ö½ÚµÄÊı¾İ},{01000000}±£Áô¡£
 				if (copyline&&y == 1)
 				{
 					copyline = false;
 				}
-				Repeat = (*pData) & 0x3f; // è·å¾—æ•°æ®ç»„ä¸­çš„é•¿åº¦
+				Repeat = (*pData) & 0x3f; // »ñµÃÊı¾İ×éÖĞµÄ³¤¶È
 				pData++;
 				for (int i = 1; i <= Repeat; i++)
 				{
@@ -115,14 +115,14 @@ namespace NE {
 				}
 				break;
 			case 2:
-				// {10******} è¡¨ç¤ºé‡å¤næ¬¡åƒç´ 
-				// {10  +6bit Times}+{1Byte Index}, è¡¨ç¤ºé‡å¤næ¬¡åƒç´ ã€‚
-				// {10  +é‡å¤1~63æ¬¡}+{0~255ä¸ªè°ƒè‰²æ¿å¼•ç´¢},{10000000}ä¿ç•™ã€‚
+				// {10******} ±íÊ¾ÖØ¸´n´ÎÏñËØ
+				// {10  +6bit Times}+{1Byte Index}, ±íÊ¾ÖØ¸´n´ÎÏñËØ¡£
+				// {10  +ÖØ¸´1~63´Î}+{0~255¸öµ÷É«°åÒıË÷},{10000000}±£Áô¡£
 				if (copyline&&y == 1)
 				{
 					copyline = false;
 				}
-				Repeat = (*pData) & 0x3f; // è·å¾—é‡å¤çš„æ¬¡æ•°
+				Repeat = (*pData) & 0x3f; // »ñµÃÖØ¸´µÄ´ÎÊı
 				pData++;
 				for (int i = 1; i <= Repeat; i++)
 				{
@@ -135,10 +135,10 @@ namespace NE {
 				pData++;
 				break;
 			case 3:
-				// {11******} è¡¨ç¤ºè·³è¿‡nä¸ªåƒç´ ï¼Œè·³è¿‡çš„åƒç´ ç”¨é€æ˜è‰²ä»£æ›¿
-				// {11  +6bit Times}, è¡¨ç¤ºè·³è¿‡nä¸ªåƒç´ ï¼Œè·³è¿‡çš„åƒç´ ç”¨é€æ˜è‰²ä»£æ›¿ã€‚
-				// {11  +è·³è¿‡1~63ä¸ªåƒç´ },{11000000}ä¿ç•™ã€‚
-				Repeat = (*pData) & 0x3f; // è·å¾—é‡å¤æ¬¡æ•°
+				// {11******} ±íÊ¾Ìø¹ın¸öÏñËØ£¬Ìø¹ıµÄÏñËØÓÃÍ¸Ã÷É«´úÌæ
+				// {11  +6bit Times}, ±íÊ¾Ìø¹ın¸öÏñËØ£¬Ìø¹ıµÄÏñËØÓÃÍ¸Ã÷É«´úÌæ¡£
+				// {11  +Ìø¹ı1~63¸öÏñËØ},{11000000}±£Áô¡£
+				Repeat = (*pData) & 0x3f; // »ñµÃÖØ¸´´ÎÊı
 				for (int i = 1; i <= Repeat; i++)
 				{
 					if (Pixels < PixelLen)
@@ -149,7 +149,7 @@ namespace NE {
 				}
 				pData++;
 				break;
-			default: // ä¸€èˆ¬ä¸å­˜åœ¨è¿™ç§æƒ…å†µ
+			default: // Ò»°ã²»´æÔÚÕâÖÖÇé¿ö
 				printf("Error!\n");
 				break;
 			}
@@ -1053,18 +1053,18 @@ namespace NE {
 
 	void MAP::MapHandler(uint8_t* Buffer, uint32_t inSize, uint8_t* outBuffer, uint32_t* outSize)
 	{
-		// JPEGæ•°æ®å¤„ç†åŸç†
-		// 1ã€å¤åˆ¶D8åˆ°D9çš„æ•°æ®åˆ°ç¼“å†²åŒºä¸­
-		// 2ã€åˆ é™¤ç¬¬3ã€4ä¸ªå­—èŠ‚ FFA0
-		// 3ã€ä¿®æ”¹FFDAçš„é•¿åº¦00 09 ä¸º 00 0C
-		// 4ã€åœ¨FFDAæ•°æ®çš„æœ€åæ·»åŠ 00 3F 00
-		// 5ã€æ›¿æ¢FFDAåˆ°FF D9ä¹‹é—´çš„FFæ•°æ®ä¸ºFF 00
+		// JPEGÊı¾İ´¦ÀíÔ­Àí
+		// 1¡¢¸´ÖÆD8µ½D9µÄÊı¾İµ½»º³åÇøÖĞ
+		// 2¡¢É¾³ıµÚ3¡¢4¸ö×Ö½Ú FFA0
+		// 3¡¢ĞŞ¸ÄFFDAµÄ³¤¶È00 09 Îª 00 0C
+		// 4¡¢ÔÚFFDAÊı¾İµÄ×îºóÌí¼Ó00 3F 00
+		// 5¡¢Ìæ»»FFDAµ½FF D9Ö®¼äµÄFFÊı¾İÎªFF 00
 
-		uint32_t TempNum = 0;						// ä¸´æ—¶å˜é‡ï¼Œè¡¨ç¤ºå·²è¯»å–çš„é•¿åº¦
-		uint16_t TempTimes = 0;					// ä¸´æ—¶å˜é‡ï¼Œè¡¨ç¤ºå¾ªç¯çš„æ¬¡æ•°
+		uint32_t TempNum = 0;						// ÁÙÊ±±äÁ¿£¬±íÊ¾ÒÑ¶ÁÈ¡µÄ³¤¶È
+		uint16_t TempTimes = 0;					// ÁÙÊ±±äÁ¿£¬±íÊ¾Ñ­»·µÄ´ÎÊı
 		uint32_t Temp = 0;
 
-		// å½“å·²è¯»å–æ•°æ®çš„é•¿åº¦å°äºæ€»é•¿åº¦æ—¶ç»§ç»­
+		// µ±ÒÑ¶ÁÈ¡Êı¾İµÄ³¤¶ÈĞ¡ÓÚ×Ü³¤¶ÈÊ±¼ÌĞø
 		while (TempNum < inSize && *Buffer++ == 0xFF)
 		{
 			*outBuffer++ = 0xFF;
@@ -1086,8 +1086,8 @@ namespace NE {
 				Buffer++;
 				TempNum++;
 
-				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // è¯»å–é•¿åº¦
-				ByteSwap(TempTimes); // å°†é•¿åº¦è½¬æ¢ä¸ºIntelé¡ºåº
+				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // ¶ÁÈ¡³¤¶È
+				ByteSwap(TempTimes); // ½«³¤¶È×ª»»ÎªIntelË³Ğò
 
 
 				for (int i = 0; i < TempTimes; i++)
@@ -1101,8 +1101,8 @@ namespace NE {
 				*outBuffer++ = 0xC4;
 				Buffer++;
 				TempNum++;
-				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // è¯»å–é•¿åº¦
-				ByteSwap(TempTimes); // å°†é•¿åº¦è½¬æ¢ä¸ºIntelé¡ºåº
+				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // ¶ÁÈ¡³¤¶È
+				ByteSwap(TempTimes); // ½«³¤¶È×ª»»ÎªIntelË³Ğò
 
 				for (int i = 0; i < TempTimes; i++)
 				{
@@ -1115,8 +1115,8 @@ namespace NE {
 				Buffer++;
 				TempNum++;
 
-				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // è¯»å–é•¿åº¦
-				ByteSwap(TempTimes); // å°†é•¿åº¦è½¬æ¢ä¸ºIntelé¡ºåº
+				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // ¶ÁÈ¡³¤¶È
+				ByteSwap(TempTimes); // ½«³¤¶È×ª»»ÎªIntelË³Ğò
 
 				for (int i = 0; i < TempTimes; i++)
 				{
@@ -1131,8 +1131,8 @@ namespace NE {
 				Buffer++;
 				TempNum++;
 
-				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // è¯»å–é•¿åº¦
-				ByteSwap(TempTimes); // å°†é•¿åº¦è½¬æ¢ä¸ºIntelé¡ºåº
+				memcpy(&TempTimes, Buffer, sizeof(uint16_t)); // ¶ÁÈ¡³¤¶È
+				ByteSwap(TempTimes); // ½«³¤¶È×ª»»ÎªIntelË³Ğò
 				Buffer++;
 				TempNum++;
 				Buffer++;
@@ -1145,9 +1145,9 @@ namespace NE {
 				*outBuffer++ = 0x00;
 				*outBuffer++ = 0x3F;
 				*outBuffer++ = 0x00;
-				Temp += 1; // è¿™é‡Œåº”è¯¥æ˜¯+3çš„ï¼Œå› ä¸ºå‰é¢çš„0xFFA0æ²¡æœ‰-2ï¼Œæ‰€ä»¥è¿™é‡Œåª+1ã€‚
+				Temp += 1; // ÕâÀïÓ¦¸ÃÊÇ+3µÄ£¬ÒòÎªÇ°ÃæµÄ0xFFA0Ã»ÓĞ-2£¬ËùÒÔÕâÀïÖ»+1¡£
 
-						   // å¾ªç¯å¤„ç†0xFFDAåˆ°0xFFD9ä¹‹é—´æ‰€æœ‰çš„0xFFæ›¿æ¢ä¸º0xFF00
+						   // Ñ­»·´¦Àí0xFFDAµ½0xFFD9Ö®¼äËùÓĞµÄ0xFFÌæ»»Îª0xFF00
 				for (; TempNum < inSize - 2;)
 				{
 					if (*Buffer == 0xFF)
@@ -1164,13 +1164,13 @@ namespace NE {
 						TempNum++;
 					}
 				}
-				// ç›´æ¥åœ¨è¿™é‡Œå†™ä¸Šäº†0xFFD9ç»“æŸJpegå›¾ç‰‡.
-				Temp--; // è¿™é‡Œå¤šäº†ä¸€ä¸ªå­—èŠ‚ï¼Œæ‰€ä»¥å‡å»ã€‚
+				// Ö±½ÓÔÚÕâÀïĞ´ÉÏÁË0xFFD9½áÊøJpegÍ¼Æ¬.
+				Temp--; // ÕâÀï¶àÁËÒ»¸ö×Ö½Ú£¬ËùÒÔ¼õÈ¥¡£
 				outBuffer--;
 				*outBuffer-- = 0xD9;
 				break;
 			case 0xD9:
-				// ç®—æ³•é—®é¢˜ï¼Œè¿™é‡Œä¸ä¼šè¢«æ‰§è¡Œï¼Œä½†ç»“æœä¸€æ ·ã€‚
+				// Ëã·¨ÎÊÌâ£¬ÕâÀï²»»á±»Ö´ĞĞ£¬µ«½á¹ûÒ»Ñù¡£
 				*outBuffer++ = 0xD9;
 				TempNum++;
 				break;
