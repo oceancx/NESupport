@@ -13,6 +13,7 @@ using std::endl;
 using std::ios;
 
 #define MEM_READ_WITH_OFF(off,dst,src,len) if(off+len<=src.size()){  memcpy((uint8_t*)dst,(uint8_t*)(src.data()+off),len);off+=len;   }
+#define MEM_COPY_WITH_OFF(off,dst,src,len) {  memcpy(dst,src+off,len);off+=len;   }
 
 
 #ifndef TGA_FILE_HEADER_H
@@ -635,20 +636,21 @@ namespace NE {
 
 	Sprite* WDF::UnpackSprite(uint32_t id, std::vector<PalSchemePart> pal)
 	{
-
 		Index index = mIndencies[mIdToPos[id]];
 		char* data = (char*)(m_FileData.data() + index.offset);
 		size_t size = index.size;
+		size_t offset = 0;
 		assert(check_file_type(data, size) == FILE_TYPE_SPRITE);
 		std::string s(data, size);
 		std::stringstream ss(s);
 		
 		WAS::Header header;
-		ss.read((char*)&header, sizeof(header));
+		MEM_COPY_WITH_OFF(offset, &header, data, sizeof(header));
+
 		if (header.Len > 12) {
 			int addonHeadLen = header.Len - 12;
-			ss.seekg(addonHeadLen, std::ios::cur);
-			printf("was header over 12!");
+			offset += addonHeadLen;
+			printf("was header over 12!\n");
 		}
 		Sprite* sprite = new Sprite();
 		sprite->GroupFrameCount = header.GroupFrameCount;
@@ -658,9 +660,9 @@ namespace NE {
 		sprite->Width = header.Width;
 		sprite->Height = header.Height;
 
-		size_t readHeaderLen = ss.tellg();
+		size_t readHeaderLen = offset;
 		uint16_t m_Palette16[256];
-		ss.read((char*)m_Palette16, sizeof(m_Palette16));
+		MEM_COPY_WITH_OFF(offset, m_Palette16, data ,sizeof(m_Palette16));
 
 		if (pal.size() != 0) {
 			for (auto& v : pal)
@@ -679,19 +681,19 @@ namespace NE {
 
 		int frameTotalSize = header.GroupFrameCount*header.GroupCount;
 		std::vector<uint32_t> frameIndexes(frameTotalSize, 0);
-		ss.read((char*)frameIndexes.data(), frameIndexes.size() * sizeof(uint32_t));
+		MEM_COPY_WITH_OFF(offset, frameIndexes.data(), data, frameIndexes.size() * sizeof(uint32_t));
 		sprite->Frames.resize(frameTotalSize);
 		for (int i = 0; i < frameTotalSize; i++)
 		{
-			size_t was_off = readHeaderLen + frameIndexes[i];
-			ss.seekg(was_off, std::ios::beg);
+			size_t frame_off = readHeaderLen + frameIndexes[i];
+			offset = frame_off;
 
 			WAS::FrameHeader frameHeader{ 0 };
-			ss.read((char*)&frameHeader, sizeof(frameHeader));
+			MEM_COPY_WITH_OFF(offset, &frameHeader, data, sizeof(frameHeader));
 
 			if (frameHeader.Height >= (1 << 15) || frameHeader.Width >= (1 << 15) || frameHeader.Height < 0 || frameHeader.Width < 0)
 			{
-				printf("read frame header exception");
+				printf("read frame header exception\n");
 				continue;
 			}
 			Sprite::Sequence& frame = sprite->Frames[i];
@@ -707,31 +709,17 @@ namespace NE {
 			std::vector<uint32_t>& bitmap = frame.Src;
 
 			std::vector<uint32_t> frameLine(fHeight, 0);
-			ss.read((char*)frameLine.data(), frameLine.size() * sizeof(uint32_t));
+			MEM_COPY_WITH_OFF(offset, frameLine.data(), data,frameLine.size() * sizeof(uint32_t));
+
 			uint32_t* pBmpStart = nullptr;
 			bool copyLine = true;
 			for (int j = 0; j < fHeight; j++)
 			{
 				uint32_t lineDataPos = frameLine[j];
-				size_t linelen = 0;
-				if (j < fHeight - 1) {
-					linelen = frameLine[j + 1] - frameLine[j];
-				}
-				else {
-					if (i < frameTotalSize - 1) {
-						linelen = frameIndexes[i + 1] - frameIndexes[i] - frameLine[j];
-					}
-					else {
-						linelen = size - readHeaderLen - frameIndexes[i] - frameLine[j];
-					}
-				}
-				std::vector<uint8_t> lineData(linelen, 0);
-				ss.seekg(was_off + lineDataPos, std::ios::beg);
-				ss.read((char*)lineData.data(), linelen);
-
+				offset = frame_off + lineDataPos;
 				pBmpStart = bitmap.data() + fWidth * (j);
 				int pixelLen = fWidth;
-				SpriteDataHandler(lineData.data(), pBmpStart, 0, pixelLen, j, copyLine, m_Palette16, m_Palette32);
+				SpriteDataHandler((uint8_t*)(data + offset), pBmpStart, 0, pixelLen, j, copyLine, m_Palette16, m_Palette32);
 			}
 
 			if (copyLine)
@@ -753,7 +741,6 @@ namespace NE {
 					break;
 				}
 			}
-
 			/*printf("sprite is blank %d\n", frame.IsBlank);
 			std::string path("e:/Github/SimpleEngine/");
 			path = path + std::to_string(i) + ".tga";
