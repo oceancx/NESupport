@@ -16,6 +16,28 @@ using std::ios;
 #define MEM_COPY_WITH_OFF(off,dst,src,len) {  memcpy(dst,src+off,len);off+=len;   }
 
 
+struct Map3FrameHeader
+{
+	unsigned int sync1 : 8;
+
+	unsigned int error_protection : 1;
+	unsigned int layer : 2;
+	unsigned int version : 2;
+	unsigned int sync2 : 3;
+
+	unsigned int extension : 1;
+	unsigned int padding : 1;
+	unsigned int sample_rate_index : 2;
+	unsigned int bit_rate_index : 4;
+
+	unsigned int emphasis : 2;
+	unsigned int original : 1;
+	unsigned int copyright : 1;
+	unsigned int mode_extension : 2;
+	unsigned int channel_mode : 2;
+
+};
+
 #ifndef TGA_FILE_HEADER_H
 #define TGA_FILE_HEADER_H
 #pragma pack(push)
@@ -200,7 +222,7 @@ namespace NE {
 		uint32_t flag = 0;
 		memcpy((char*)&flag, data, 4);
 		if (flag == 'SggO') {
-			printf("read mp3 file\n");
+			printf("read oggs file\n");
 			return FILE_TYPE_OGGS;
 		}
 		else if (flag == 'FFIR') {
@@ -215,13 +237,21 @@ namespace NE {
 			if(predict_text){
 				printf("read txt file\n");
 				return FILE_TYPE_TEXT;
-			}else{
-				printf("read unknown file\n");
-				return FILE_TYPE_UNKNOWN;
+			}else {
+				Map3FrameHeader header;
+				size_t off = 0;
+				MEM_COPY_WITH_OFF(off, &header, data, sizeof(header));
+				if(header.sync1==0xff && header.sync2 ==0x7){
+					printf("read map3 file\n");
+					return FILE_TYPE_MP3;
+				}
+				else {
+					printf("read unknown file\n");
+					return FILE_TYPE_UNKNOWN;
+				}
 			}
 		}
 	}
-
 
 	uint8_t MixAlpha(uint8_t color, uint8_t alpha)
 	{
