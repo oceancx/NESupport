@@ -216,7 +216,7 @@ namespace NE {
 		ofile.close();
 	}
 
-	int check_file_type(char* data, size_t size)
+	EFileType check_file_type(char* data, size_t size)
 	{
 		bool predict_text = strlen(data) == size;
 		uint32_t flag = 0;

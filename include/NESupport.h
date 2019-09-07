@@ -49,7 +49,7 @@ namespace NE {
 		std::vector<PalSegment> schemes;
 	};
 
-	int check_file_type(char* data,size_t size);
+	EFileType check_file_type(char* data,size_t size);
 
 	struct Sprite
 	{
@@ -182,7 +182,7 @@ namespace NE {
 
 		void LoadFileData(uint32_t id, uint8_t*& pData, size_t& size);
 		
-		
+
 		Sprite* UnpackSprite(uint32_t id, std::vector<PalSchemePart> pal);
 		/*void UnpackOggs(uint32_t id =0) {};
 		void UnpackRIFF(uint32_t id = 0) {};
