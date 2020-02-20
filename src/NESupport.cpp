@@ -419,7 +419,7 @@ namespace NE {
 	{
 		std::fstream fs(m_Path, ios::in | ios::binary);
 		if (!fs) {
-			cerr << "open wdf file error!!!" << endl;
+			cerr << "open wdf file error!!!" << m_Path << endl;
 			return;
 		}
 		//std::cerr << "InitWDF:" << m_Path.c_str() << std::endl;
@@ -832,7 +832,7 @@ namespace NE {
 	{
 		std::fstream fs(m_FileName, ios::in | ios::binary);
 		if (!fs) {
-			std::cerr << "Map file open error!" << std::endl;
+			std::cerr << "Map file open error!" << m_FileName << std::endl;
 			return;
 		}
 		std::cerr << "InitMAP:" << m_FileName.c_str() << std::endl;
