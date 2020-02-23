@@ -49,7 +49,7 @@ namespace NE {
 		std::vector<PalSegment> schemes;
 	};
 
-	EFileType check_file_type(char* data,size_t size);
+	int check_file_type(char* data,size_t size);
 
 	struct Sprite
 	{
