@@ -222,31 +222,31 @@ namespace NE {
 		uint32_t flag = 0;
 		memcpy((char*)&flag, data, 4);
 		if (flag == 'SggO') {
-			printf("read oggs file\n");
+			//printf("read oggs file\n");
 			return FILE_TYPE_OGGS;
 		}
 		else if (flag == 'FFIR') {
-			printf("read wav file\n");
+			//printf("read wav file\n");
 			return FILE_TYPE_RIFF;
 		}
 		else if ((flag & 0xffff) == 'PS')
 		{
-			printf("read sp file\n");
+			//printf("read sp file\n");
 			return FILE_TYPE_SPRITE;
 		}else{
 			if(predict_text){
-				printf("read txt file\n");
+				//printf("read txt file\n");
 				return FILE_TYPE_TEXT;
 			}else {
 				Map3FrameHeader header;
 				size_t off = 0;
 				MEM_COPY_WITH_OFF(off, &header, data, sizeof(header));
 				if(header.sync1==0xff && header.sync2 ==0x7){
-					printf("read map3 file\n");
+					//printf("read map3 file\n");
 					return FILE_TYPE_MP3;
 				}
 				else {
-					printf("read unknown file\n");
+					//printf("read unknown file\n");
 					return FILE_TYPE_UNKNOWN;
 				}
 			}
