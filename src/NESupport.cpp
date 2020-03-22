@@ -16,6 +16,47 @@ using std::ios;
 #define MEM_COPY_WITH_OFF(off,dst,src,len) {  memcpy(dst,src+off,len);off+=len;   }
 
 
+#define BITMAPFILE_ID  0x4D42
+#define BITMAPFILE_PAL_SIZE  256
+
+#pragma pack(push) 
+#pragma pack(1)   
+
+struct BitmapFileHeader		//size = 14
+{
+	uint16_t bfType;			//must be 0x4D42
+	uint32_t bfSize;			//fileSize = header + infoHeader + pal + imageData
+	uint16_t bfReserved1;
+	uint16_t bfReserved2;
+	uint32_t bfOffBits;		//imageData offset 
+};
+
+
+struct BitmapInfoHeader				//size = 40
+{
+	uint32_t		biSize;				//40
+	uint32_t      biWidth;
+	uint32_t      biHeight;
+	uint16_t      biPlanes;			//must be 1
+	uint16_t      biBitCount;			//8	16	24	32
+	uint32_t      biCompression;		//BI_RBG
+	uint32_t      biSizeImage;		//biWidth*biHeight*biBitCount/8
+	uint32_t      biXPelsPerMeter;
+	uint32_t      biYPelsPerMeter;
+	uint32_t      biClrUsed;			//can be 256
+	uint32_t      biClrImportant;		//can be 256
+};
+
+struct BitmapFile
+{
+	BitmapFileHeader header;
+	BitmapInfoHeader infoHeader;
+	uint32_t palettes[256];		//size = 1024	rgba
+	uint8_t* imageData;
+};
+#pragma pack(pop)
+
+
 struct Map3FrameHeader
 {
 	unsigned int sync1 : 8;
@@ -44,18 +85,18 @@ struct Map3FrameHeader
 #pragma pack(1)
 struct TGA_FILE_HEADER
 {
-	uint8_t IdLength;				
-	uint8_t ColorMapType;			
+	uint8_t IdLength;
+	uint8_t ColorMapType;
 	uint8_t ImageType;				// 2 or 10
-	uint16_t ColorMapFirstIndex;	
-	uint16_t ColorMapLength;		
+	uint16_t ColorMapFirstIndex;
+	uint16_t ColorMapLength;
 	uint8_t ColorMapEntrySize;		// (default:0，support 16/24/32)
-	uint16_t XOrigin;				
-	uint16_t YOrigin;				
-	uint16_t ImageWidth;			
-	uint16_t ImageHeight;			
+	uint16_t XOrigin;
+	uint16_t YOrigin;
+	uint16_t ImageWidth;
+	uint16_t ImageHeight;
 	uint8_t PixelDepth;				// 8,16,24,32
-	uint8_t ImageDescruptor;		
+	uint8_t ImageDescruptor;
 };
 #pragma pack(pop)
 #endif
@@ -63,7 +104,81 @@ struct TGA_FILE_HEADER
 namespace NE {
 
 
-	void SpriteDataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen, int y, bool& copyline, uint16_t*m_Palette16, uint32_t* m_Palette32)
+	bool SaveBitmap(std::string path, const BitmapFile& file)
+	{
+		std::fstream f(path, std::ios::out | std::ios::binary);
+		if (f.rdstate() == f.failbit)
+		{
+			std::cout << "open file error!" << std::endl;
+			return false;
+		}
+
+		f.write((char*)&file.header, sizeof(BitmapFileHeader));
+		f.write((char*)&file.infoHeader, sizeof(BitmapInfoHeader));
+
+		if (file.infoHeader.biBitCount == 8)
+		{
+			f.write((char*)file.palettes, BITMAPFILE_PAL_SIZE * sizeof(uint32_t));
+		}
+
+		f.seekp(file.header.bfOffBits, std::ios::beg);
+		f.write((char*)file.imageData, file.infoHeader.biSizeImage);
+		f.close();
+		return true;
+	}
+
+
+
+	void CreateBitmap(BitmapFile& file, int w, int h, int colorBitCount, uint8_t* pixels, uint32_t* pals = nullptr) {
+
+		memset(&file, 0, sizeof(BitmapFile));
+
+		int lineSize = (w * colorBitCount + 31) / 32 * 4;
+		int dataSize = h * lineSize;
+		int headSize = sizeof(BitmapFileHeader) + sizeof(BitmapInfoHeader);
+		int patSize = colorBitCount == 8 ? BITMAPFILE_PAL_SIZE * sizeof(uint32_t) : 0;
+
+		file.infoHeader.biSize = sizeof(BitmapInfoHeader);
+		file.infoHeader.biPlanes = 1;
+		file.infoHeader.biCompression = 0;
+		file.infoHeader.biWidth = w;
+		file.infoHeader.biHeight = h;
+		file.infoHeader.biBitCount = colorBitCount;
+		file.infoHeader.biSizeImage = dataSize;
+		file.infoHeader.biClrUsed = colorBitCount == 8 ? 256 : 0;
+		file.infoHeader.biClrImportant = file.infoHeader.biClrUsed;
+
+		file.header.bfType = BITMAPFILE_ID;
+		file.header.bfSize = headSize + patSize + dataSize;
+		file.header.bfOffBits = (headSize + patSize + 3) / 4 * 4;
+
+		memset(file.palettes, 0, sizeof(file.palettes));
+		if (colorBitCount == 8) {
+			for (int i = 0; i < 256; i++) {
+				file.palettes[i] = pals[i];
+			}
+		}
+		file.imageData = new uint8_t[file.infoHeader.biSizeImage];
+		memset(file.imageData, 0, file.infoHeader.biSizeImage);
+
+		int pixbytes = colorBitCount / 8;
+		for (int i = 0; i < h; i++)
+		{
+			for (int j = 0; j < w; j++)
+			{
+				int dst = i * lineSize + j * pixbytes;
+				uint32_t tmpc = ((uint32_t*)pixels)[i * w + j];
+				for (int p = 0; p < pixbytes; p++)
+				{
+					file.imageData[dst + p] = (tmpc & 0xff);
+					tmpc = tmpc >> 8;
+				}
+			}
+		}
+	}
+
+
+	void SpriteDataHandler(uint8_t* pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen, int y, bool& copyline, uint16_t* m_Palette16, uint32_t* m_Palette32)
 	{
 		uint32_t Pixels = pixelOffset;
 		uint32_t PixelLen = pixelLen;
@@ -78,7 +193,7 @@ namespace NE {
 			switch (style)
 			{
 			case 0: // {00******}
-				if (copyline&&y == 1)
+				if (copyline && y == 1)
 				{
 					copyline = false;
 				}
@@ -121,7 +236,7 @@ namespace NE {
 				// {01******} 表示不带Alpha通道不重复的n个像素组成的数据段
 				// {01  +6bit Times}+{nByte Datas},表示不带Alpha通道不重复的n个像素组成的数据段。
 				// {01  +1~63个长度}+{n个字节的数据},{01000000}保留。
-				if (copyline&&y == 1)
+				if (copyline && y == 1)
 				{
 					copyline = false;
 				}
@@ -141,7 +256,7 @@ namespace NE {
 				// {10******} 表示重复n次像素
 				// {10  +6bit Times}+{1Byte Index}, 表示重复n次像素。
 				// {10  +重复1~63次}+{0~255个调色板引索},{10000000}保留。
-				if (copyline&&y == 1)
+				if (copyline && y == 1)
 				{
 					copyline = false;
 				}
@@ -192,6 +307,127 @@ namespace NE {
 		}
 	}
 
+	void SpriteOriginDataHandler(uint8_t* data, int len, uint8_t* image_idx, uint8_t* image_alpha)
+	{
+		int offset = 0;
+		uint16_t AlphaPixel = 0;
+
+		while (*data != 0) // {00000000} 表示像素行结束，如有剩余像素用透明色代替
+		{
+			uint8_t style = 0;
+			uint8_t Level = 0; // Alpha层数
+			uint8_t Repeat = 0; // 重复次数
+			style = (*data & 0xc0) >> 6;  // 取字节的前两个比特
+			switch (style)
+			{
+			case 0: // {00******}		
+				if (*data & 0x20) // {001*****} 表示带有Alpha通道的单个像素
+				{
+					// {001 +5bit Alpha}+{1Byte Index}, 表示带有Alpha通道的单个像素。
+					// {001 +0~31层Alpha通道}+{1~255个调色板引索}
+					Level = (*data) & 0x1f; // 0x1f=(11111) 获得Alpha通道的值
+					data++; // 下一个字节
+					if (offset < len)
+					{
+						*image_idx++ = *data;
+						*image_alpha++ = Level * 8;
+						offset++;
+						data++;
+					}
+				}
+				else // {000*****} 表示重复n次带有Alpha通道的像素
+				{
+					// {000 +5bit Times}+{1Byte Alpha}+{1Byte Index}, 表示重复n次带有Alpha通道的像素。
+					// {000 +重复1~31次}+{0~255层Alpha通道}+{1~255个调色板引索}
+					// 注: 这里的{00000000} 保留给像素行结束使用，所以只可以重复1~31次。
+					Repeat = (*data) & 0x1f; // 获得重复的次数
+					data++;
+					Level = *data; // 获得Alpha通道值
+					data++;
+					for (int i = 1; i <= Repeat; i++)
+					{
+						if (offset < len)
+						{
+							*image_idx++ = *data;
+							*image_alpha++ = Level * 8;
+							offset++;
+						}
+					}
+					data++;
+				}
+				break;
+			case 1:
+				// {01******} 表示不带Alpha通道不重复的n个像素组成的数据段
+				// {01  +6bit Times}+{nByte Datas},表示不带Alpha通道不重复的n个像素组成的数据段。
+				// {01  +1~63个长度}+{n个字节的数据},{01000000}保留。
+				Repeat = (*data) & 0x3f; // 获得数据组中的长度
+				data++;
+				for (int i = 1; i <= Repeat; i++)
+				{
+					if (offset < len)
+					{
+						*image_idx++ = *data;
+						image_alpha++;
+						offset++;
+						data++;
+					}
+				}
+				break;
+			case 2:
+				// {10******} 表示重复n次像素
+				// {10  +6bit Times}+{1Byte Index}, 表示重复n次像素。
+				// {10  +重复1~63次}+{0~255个调色板引索},{10000000}保留。
+				Repeat = (*data) & 0x3f; // 获得重复的次数
+				data++;
+				for (int i = 1; i <= Repeat; i++)
+				{
+					if (offset < len)
+					{
+						*image_idx++ = *data;
+						image_alpha++;
+						offset++;
+					}
+				}
+				data++;
+				break;
+			case 3:
+				// {11******} 表示跳过n个像素，跳过的像素用透明色代替
+				// {11  +6bit Times}, 表示跳过n个像素，跳过的像素用透明色代替。
+				// {11  +跳过1~63个像素},{11000000}保留。
+				Repeat = (*data) & 0x3f; // 获得重复次数
+				for (int i = 1; i <= Repeat; i++)
+				{
+					if (offset < len)
+					{
+						image_idx++;
+						image_alpha++;
+						offset++;
+					}
+				}
+				data++;
+				break;
+			default: // 一般不存在这种情况
+				printf("Error!\n");
+				break;
+			}
+		}
+		if (len > offset)
+		{
+			uint32_t Repeat = 0;
+			Repeat = len - offset;
+			for (uint32_t i = 0; i < Repeat; i++)
+			{
+				if (offset < len)
+				{
+					image_idx++;
+					image_alpha++;
+					offset++;
+				}
+			}
+		}
+	}
+
+
 	void UtilsSaveImageFile(const char* filename, int width, int height, int pixelDepth, char* data)
 	{
 		TGA_FILE_HEADER TgaHeader;
@@ -212,7 +448,7 @@ namespace NE {
 		std::fstream ofile;
 		ofile.open(filename, ios::out | ios::trunc | ios::binary);
 		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
-		ofile.write((char*)data, width*height*pixelDepth / 8);
+		ofile.write((char*)data, width * height * pixelDepth / 8);
 		ofile.close();
 	}
 
@@ -233,15 +469,17 @@ namespace NE {
 		{
 			//printf("read sp file\n");
 			return FILE_TYPE_SPRITE;
-		}else{
-			if(predict_text){
+		}
+		else {
+			if (predict_text) {
 				//printf("read txt file\n");
 				return FILE_TYPE_TEXT;
-			}else {
+			}
+			else {
 				Map3FrameHeader header;
 				size_t off = 0;
 				MEM_COPY_WITH_OFF(off, &header, data, sizeof(header));
-				if(header.sync1==0xff && header.sync2 ==0x7){
+				if (header.sync1 == 0xff && header.sync2 == 0x7) {
 					//printf("read map3 file\n");
 					return FILE_TYPE_MP3;
 				}
@@ -257,7 +495,19 @@ namespace NE {
 	{
 		// a*C+(1-a)*C
 		uint32_t res = color * alpha / 0xff;
-		return res > 0xff ? (res%0xff) : res;
+		return res > 0xff ? (res % 0xff) : res;
+	}
+	uint32_t BitmapRGB565to888(uint16_t color, uint8_t alpha)
+	{
+		unsigned int r = (color >> 11) & 0x1f;
+		unsigned int g = (color >> 5) & 0x3f;
+		unsigned int b = (color) & 0x1f;
+		uint32_t R, G, B, A;
+		A = alpha;
+		R = (r << 3) | (r >> 2);
+		G = (g << 2) | (g >> 4);
+		B = (b << 3) | (b >> 2);
+		return A << 24 | (R << 16) | (G << 8) | B;
 	}
 
 	uint32_t RGB565to888(uint16_t color, uint8_t alpha)
@@ -284,15 +534,48 @@ namespace NE {
 		CR = ((r * c[0] + g * c[1] + b * c[2]) >> 8);
 		if (CR > 0x1f) CR = 0x1f;
 
-		CG = ((r *  c[3] + g * c[4] + b * c[5]) >> 8);
+		CG = ((r * c[3] + g * c[4] + b * c[5]) >> 8);
 		if (CG > 0x3f) CG = 0x3F;
 
-		CB = ((r *  c[6] + g * c[7] + b * c[8]) >> 8);
+		CB = ((r * c[6] + g * c[7] + b * c[8]) >> 8);
 		if (CB > 0x1f) CB = 0x1f;
 		return   (CR << 11) | (CG << 5) | CB;
 	}
 
-	// 16bit 565Type Alpha mix
+	uint32_t AlphaRGBA(uint32_t Src, uint8_t Alpha)
+	{
+		uint32_t Result;
+		// after mix = ( ( A-B ) * Alpha ) >> 5 + B
+		// after mix = ( A * Alpha + B * ( 32-Alpha ) ) / 32
+
+		uint32_t R_Src, G_Src, B_Src;
+		R_Src = G_Src = B_Src = 0;
+
+		R_Src = Src & 0x00ff0000;
+		G_Src = Src & 0x0000ff00;
+		B_Src = Src & 0x000000ff;
+
+		R_Src = R_Src >> 16;
+		G_Src = G_Src >> 8;
+
+		uint32_t R_Des, G_Des, B_Des;
+		R_Des = G_Des = B_Des = 0;
+
+
+		uint32_t R_Res, G_Res, B_Res;
+		R_Res = G_Res = B_Res = 0;
+
+		R_Res = (((R_Src - R_Des) * Alpha) >> 8) + R_Des;
+		G_Res = (((G_Src - G_Des) * Alpha) >> 8) + G_Des;
+		B_Res = (((B_Src - B_Des) * Alpha) >> 8) + B_Des;
+
+		R_Res = R_Res << 16;
+		G_Res = G_Res << 8;
+
+		Result = 0xff << 24 | R_Res | G_Res | B_Res;
+		return Result;
+	}
+
 	uint16_t Alpha565(uint16_t Src, uint16_t Des, uint8_t Alpha)
 	{
 		uint16_t Result;
@@ -322,9 +605,9 @@ namespace NE {
 		unsigned short R_Res, G_Res, B_Res;
 		R_Res = G_Res = B_Res = 0;
 
-		R_Res = (((R_Src - R_Des)*Alpha) >> 5) + R_Des;
-		G_Res = (((G_Src - G_Des)*Alpha) >> 5) + G_Des;
-		B_Res = (((B_Src - B_Des)*Alpha) >> 5) + B_Des;
+		R_Res = (((R_Src - R_Des) * Alpha) >> 5) + R_Des;
+		G_Res = (((G_Src - G_Des) * Alpha) >> 5) + G_Des;
+		B_Res = (((B_Src - B_Des) * Alpha) >> 5) + B_Des;
 
 		R_Res = R_Res << 11;
 		G_Res = G_Res << 5;
@@ -358,7 +641,7 @@ namespace NE {
 		uint8_t* img_data = new uint8_t[sq.Src.size() * 3];
 		for (int row = 0; row < sq.Height; row++) {
 			for (int col = 0; col < sq.Width; col++) {
-				int fliprow = sq.Height-1 - row;
+				int fliprow = sq.Height - 1 - row;
 				int i = fliprow * sq.Width + col;
 				int datai = row * sq.Width + col;
 				uint32_t pix = sq.Src[i];
@@ -367,7 +650,7 @@ namespace NE {
 				img_data[datai * 3 + 2] = pix & 0xff;
 			}
 		}
-		
+
 		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
 		ofile.write((char*)img_data, sq.Src.size() * 3);
 		delete[] img_data;
@@ -383,30 +666,150 @@ namespace NE {
 	WAS::WAS(std::string path, uint32_t offset)
 		: mPath(path)
 	{
-		std::ifstream infile(mPath, ios::binary | ios::in);
-		if (!infile) return;
-		infile.seekg(offset, ios::beg);
-		infile.read((char*)&mHeader, sizeof(mHeader));
+		m_FileOffset = 0;
+		std::ifstream fs(mPath, ios::binary | ios::in);
+		if (!fs) return;
+
+		auto fpos = fs.tellg();
+		fs.seekg(0, std::ios::end);
+		m_FileSize = fs.tellg() - fpos;
+
+		m_FileData.resize(m_FileSize);
+		fs.seekg(0, std::ios::beg);
+		fs.read((char*)m_FileData.data(), m_FileSize);
+		fs.close();
+
+		MEM_READ_WITH_OFF(m_FileOffset, &mHeader, m_FileData, sizeof(Header));
 		if (mHeader.Flag != 0x5053)
 		{
 			cerr << "Sprite File Flag Error!" << endl;
-			infile.close();
 			return;
 		}
+		if (mHeader.Len > 12) {
+			int addonHeadLen = mHeader.Len - 12;
+			m_FileOffset += addonHeadLen;
+			printf("was header over 12!\n");
+		}
 
-		uint16_t palette16[256];
-		memset(palette16, 0, sizeof(palette16));
-		infile.read((char*)palette16, sizeof(palette16));
+		/*if (pal.size() != 0) {
+			for (auto& v : pal)
+			{
+				for (int i = v.from; i < v.to; i++) {
+					m_Palette16[i] = ChangeColorPal(m_Palette16[i], v.mat);
+				}
+			}
+		}*/
+		memset(m_Palette16, 0, sizeof(m_Palette16));
+		MEM_READ_WITH_OFF(m_FileOffset, m_Palette16, m_FileData, sizeof(m_Palette16));
 
 		for (int i = 0; i < 256; i++)
 		{
-			mPalette32[i] = RGB565to888(palette16[i], 0xff);
+			m_Palette32[i] = BitmapRGB565to888(m_Palette16[i], 0xff);
 		}
 
 		int frames = mHeader.GroupCount * mHeader.GroupFrameCount;
 		mFrameIndecies.resize(frames);
-		infile.read((char*)mFrameIndecies.data(), frames * 4);
-		infile.close();
+		MEM_READ_WITH_OFF(m_FileOffset, mFrameIndecies.data(), m_FileData, mFrameIndecies.size() * sizeof(uint32_t));
+
+	}
+
+	void WAS::Decode()
+	{
+		for (int i = 0; i < mFrameIndecies.size(); i++)
+		{
+			size_t frame_off = (size_t)(mHeader.Len - 12 + sizeof(mHeader)) + mFrameIndecies[i];
+			uint32_t offset = frame_off;
+
+			WAS::FrameHeader frameHeader{ 0 };
+			MEM_COPY_WITH_OFF(offset, &frameHeader, m_FileData.data(), sizeof(frameHeader));
+
+			if (frameHeader.Height >= (1 << 15) || frameHeader.Width >= (1 << 15) || frameHeader.Height < 0 || frameHeader.Width < 0)
+			{
+				printf("read frame header exception\n");
+				continue;
+			}
+			Sprite::Sequence frame;
+			frame.KeyX = frameHeader.KeyX;
+			frame.KeyY = frameHeader.KeyY;
+			frame.Width = frameHeader.Width;
+			frame.Height = frameHeader.Height;
+
+			int32_t fWidth = frameHeader.Width;
+			int32_t fHeight = frameHeader.Height;
+			uint32_t pixels = fWidth * fHeight;
+
+			std::vector<uint32_t> frameLine(fHeight, 0);
+			MEM_COPY_WITH_OFF(offset, frameLine.data(), m_FileData.data(), frameLine.size() * sizeof(uint32_t));
+
+			uint8_t* image_idx = new uint8_t[pixels];
+			memset(image_idx, 0, pixels);
+			uint8_t* image_alpha = new uint8_t[pixels];
+			memset(image_alpha, 0, pixels);
+
+			uint32_t image_offset = 0;
+			for (int j = 0; j < fHeight; j++)
+			{
+				uint32_t lineDataPos = frameLine[j];
+				offset = frame_off + lineDataPos;
+				image_offset = fWidth * j;
+				SpriteOriginDataHandler((uint8_t*)(m_FileData.data() + offset), fWidth, &image_idx[image_offset], &image_alpha[image_offset]);
+			}
+			bool copyLine = true;
+			for (int i = 0; i < fWidth; i++)
+			{
+				if (image_idx[fWidth + i] != 0)
+				{
+					copyLine = false;
+				}
+			}
+
+			if (copyLine)
+			{
+				for (int j = 0; j + 1 < fHeight; j += 2)
+				{
+					uint8_t* pDst = &image_idx[(j + 1) * fWidth];
+					uint8_t* pSrc = &image_idx[(j)*fWidth];
+					memcpy((uint8_t*)pDst, (uint8_t*)pSrc, fWidth);
+
+					pDst = &image_alpha[(j + 1) * fWidth];
+					pSrc = &image_alpha[(j)*fWidth];
+					memcpy((uint8_t*)pDst, (uint8_t*)pSrc, fWidth);
+				}
+			}
+
+			frame.IsBlank = true;
+			for (uint32_t pix = 0; pix < pixels; pix++)
+			{
+				if (image_idx[pix] != 0)
+				{
+					frame.IsBlank = false;
+					break;
+				}
+			}
+			printf("sprite is blank %d\n", frame.IsBlank);
+			std::string path("e:/Github/YZXY/res/");
+			path = path + std::to_string(i) + ".x.bmp";
+
+			uint32_t* image = new uint32_t[fWidth * fHeight];
+			memset(image, 0, sizeof(uint32_t) * fWidth * fHeight);
+			for (int i = 0; i < fWidth * fHeight; i++)
+			{
+				if (image_idx[i] != 0) {
+					image[i] = m_Palette32[image_idx[i]];
+					if (image_alpha[i] != 0) {
+						image[i] = AlphaRGBA(image[i], image_alpha[i]);
+					}
+				}
+			}
+
+			BitmapFile file;
+			CreateBitmap(file, fWidth, fHeight, 32, (uint8_t*)image);
+			SaveBitmap(path, file);
+
+
+			delete[] image_idx;
+			delete[] image_alpha;
+		}
 	}
 
 	WAS::~WAS()
@@ -471,7 +874,7 @@ namespace NE {
 		//cerr << "number:" << m_WASNumber << " offset:" << m_FileDataOffset << endl;
 
 		mIndencies.resize(m_WASNumber);
-		MEM_READ_WITH_OFF(m_FileDataOffset, mIndencies.data(), m_FileData, sizeof(Index)*m_WASNumber);
+		MEM_READ_WITH_OFF(m_FileDataOffset, mIndencies.data(), m_FileData, sizeof(Index) * m_WASNumber);
 
 		for (uint32_t i = 0; i < m_WASNumber; i++)
 		{
@@ -539,17 +942,17 @@ namespace NE {
 			delete[] m_AddonHead;
 		}
 
-		Sprite&  sprite = m_Sprites[id];
+		Sprite& sprite = m_Sprites[id];
 		sprite.FrameLoaded = false;
 		sprite.FrameWASOffset = wasReadOff;
 		sprite.ID = std::to_string(id);
 		sprite.Path = m_FileName + "/" + sprite.ID;
-		sprite.GroupCount= header.GroupCount;
+		sprite.GroupCount = header.GroupCount;
 		sprite.GroupFrameCount = header.GroupFrameCount;
-		sprite.Width= header.Width;
-		sprite.Height= header.Height;
-		sprite.KeyX= header.KeyX;
-		sprite.KeyY= header.KeyX;
+		sprite.Width = header.Width;
+		sprite.Height = header.Height;
+		sprite.KeyX = header.KeyX;
+		sprite.KeyY = header.KeyX;
 		return &sprite;
 	}
 
@@ -570,21 +973,21 @@ namespace NE {
 
 		auto& wasMemData = m_FileData;
 		uint32_t wasReadOff = sprite->FrameWASOffset;
-		int frameTotalSize = sprite->GroupFrameCount*sprite->GroupCount;
+		int frameTotalSize = sprite->GroupFrameCount * sprite->GroupCount;
 		MEM_READ_WITH_OFF(wasReadOff, &m_Palette16[0], wasMemData, 256 * 2);
 
-		if (patMatrix != nullptr&& patMatrix->size() != 0) {
-			for(auto& v : *patMatrix)
+		if (patMatrix != nullptr && patMatrix->size() != 0) {
+			for (auto& v : *patMatrix)
 			{
-				for (int i = v.from; i< v.to; i++) {
+				for (int i = v.from; i < v.to; i++) {
 					m_Palette16[i] = ChangeColorPal(m_Palette16[i], v.mat);
 				}
 			}
 		}
-		
+
 		for (int k = 0; k < 256; k++)
 		{
-			m_Palette32[k] = RGB565to888(m_Palette16[k], 0xff);	
+			m_Palette32[k] = RGB565to888(m_Palette16[k], 0xff);
 		}
 
 		std::vector<uint32_t> frameIndexes(frameTotalSize, 0);
@@ -598,7 +1001,7 @@ namespace NE {
 			WAS::FrameHeader wasFrameHeader{ 0 };
 			MEM_READ_WITH_OFF(wasReadOff, &wasFrameHeader, wasMemData, sizeof(WAS::FrameHeader));
 
-			if (wasFrameHeader.Height>= (1 << 15) || wasFrameHeader.Width >= (1 << 15) || wasFrameHeader.Height < 0 || wasFrameHeader.Width < 0)
+			if (wasFrameHeader.Height >= (1 << 15) || wasFrameHeader.Width >= (1 << 15) || wasFrameHeader.Height < 0 || wasFrameHeader.Width < 0)
 			{
 				std::cerr << "wasFrameHeader error!!!" << std::endl;
 				m_SpritesLoading[id] = false;
@@ -608,10 +1011,10 @@ namespace NE {
 
 			Sprite::Sequence& frame = sprite->Frames[i];
 			frame.KeyX = wasFrameHeader.KeyX;
-			frame.KeyY= wasFrameHeader.KeyY;
+			frame.KeyY = wasFrameHeader.KeyY;
 			frame.Width = wasFrameHeader.Width;
 			frame.Height = wasFrameHeader.Height;
-			uint32_t pixels = frame.Width*frame.Height;
+			uint32_t pixels = frame.Width * frame.Height;
 			frame.Src.resize(pixels, 0);
 
 			std::vector<uint32_t> frameLine(frame.Height, 0);
@@ -621,9 +1024,9 @@ namespace NE {
 			bool copyLine = true;
 			for (int j = 0; j < frame.Height; j++)
 			{
-				uint32_t lineDataPos = sprite->FrameWASOffset  + frameIndexes[i] + frameLine[j];
+				uint32_t lineDataPos = sprite->FrameWASOffset + frameIndexes[i] + frameLine[j];
 				uint8_t* lineData = m_FileData.data() + lineDataPos;
-				pBmpStart = frame.Src.data() + frame.Width*(j);
+				pBmpStart = frame.Src.data() + frame.Width * (j);
 				int pixelLen = frame.Width;
 				DataHandler(lineData, pBmpStart, 0, pixelLen, j, copyLine);
 			}
@@ -632,8 +1035,8 @@ namespace NE {
 			{
 				for (int j = 0; j + 1 < frame.Height; j += 2)
 				{
-					uint32_t* pDst = &frame.Src[(j + 1)*frame.Width];
-					uint32_t* pSrc = &frame.Src[j*frame.Width];
+					uint32_t* pDst = &frame.Src[(j + 1) * frame.Width];
+					uint32_t* pSrc = &frame.Src[j * frame.Width];
 					memcpy((uint8_t*)pDst, (uint8_t*)pSrc, frame.Width * 4);
 				}
 			}
@@ -671,9 +1074,7 @@ namespace NE {
 		size_t size = index.size;
 		size_t offset = 0;
 		assert(check_file_type(data, size) == FILE_TYPE_SPRITE);
-		std::string s(data, size);
-		std::stringstream ss(s);
-		
+
 		WAS::Header header;
 		MEM_COPY_WITH_OFF(offset, &header, data, sizeof(header));
 
@@ -692,7 +1093,7 @@ namespace NE {
 
 		size_t readHeaderLen = offset;
 		uint16_t m_Palette16[256];
-		MEM_COPY_WITH_OFF(offset, m_Palette16, data ,sizeof(m_Palette16));
+		MEM_COPY_WITH_OFF(offset, m_Palette16, data, sizeof(m_Palette16));
 
 		if (pal.size() != 0) {
 			for (auto& v : pal)
@@ -709,7 +1110,7 @@ namespace NE {
 			m_Palette32[k] = NE::RGB565to888(m_Palette16[k], 0xff);
 		}
 
-		int frameTotalSize = header.GroupFrameCount*header.GroupCount;
+		int frameTotalSize = header.GroupFrameCount * header.GroupCount;
 		std::vector<uint32_t> frameIndexes(frameTotalSize, 0);
 		MEM_COPY_WITH_OFF(offset, frameIndexes.data(), data, frameIndexes.size() * sizeof(uint32_t));
 		sprite->Frames.resize(frameTotalSize);
@@ -739,7 +1140,7 @@ namespace NE {
 			std::vector<uint32_t>& bitmap = frame.Src;
 
 			std::vector<uint32_t> frameLine(fHeight, 0);
-			MEM_COPY_WITH_OFF(offset, frameLine.data(), data,frameLine.size() * sizeof(uint32_t));
+			MEM_COPY_WITH_OFF(offset, frameLine.data(), data, frameLine.size() * sizeof(uint32_t));
 
 			uint32_t* pBmpStart = nullptr;
 			bool copyLine = true;
@@ -756,8 +1157,8 @@ namespace NE {
 			{
 				for (int j = 0; j + 1 < fHeight; j += 2)
 				{
-					uint32_t* pDst = &bitmap[(j + 1)*fWidth];
-					uint32_t* pSrc = &bitmap[j*fWidth];
+					uint32_t* pDst = &bitmap[(j + 1) * fWidth];
+					uint32_t* pSrc = &bitmap[j * fWidth];
 					memcpy((uint8_t*)pDst, (uint8_t*)pSrc, fWidth * 4);
 				}
 			}
@@ -796,7 +1197,7 @@ namespace NE {
 		delete[] outfilec;
 	}
 
-	std::vector<Sprite *> WDF::LoadAllSprite()
+	std::vector<Sprite*> WDF::LoadAllSprite()
 	{
 		std::vector<Sprite*> v;
 		for (uint32_t i = 0; i < m_WASNumber; i++)
@@ -823,7 +1224,7 @@ namespace NE {
 		size = index.size;
 	}
 
-	void WDF::DataHandler(uint8_t *pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen, int y, bool& copyline)
+	void WDF::DataHandler(uint8_t* pData, uint32_t* pBmpStart, int pixelOffset, int pixelLen, int y, bool& copyline)
 	{
 		SpriteDataHandler(pData, pBmpStart, pixelOffset, pixelLen, y, copyline, m_Palette16, m_Palette32);
 	}
@@ -861,8 +1262,8 @@ namespace NE {
 		m_BlockWidth = 320;
 		m_BlockHeight = 240;
 
-		m_ColCount = (uint32_t)std::ceil(m_Header.Width *1.0f / m_BlockWidth);
-		m_RowCount = (uint32_t)std::ceil(m_Header.Height*1.0f / m_BlockHeight);
+		m_ColCount = (uint32_t)std::ceil(m_Header.Width * 1.0f / m_BlockWidth);
+		m_RowCount = (uint32_t)std::ceil(m_Header.Height * 1.0f / m_BlockHeight);
 		//cout << "Row:" << m_RowCount << " Col:" << m_ColCount << endl;
 
 		m_MapWidth = m_ColCount * m_BlockWidth;
@@ -915,7 +1316,7 @@ namespace NE {
 		std::fstream ofile;
 		ofile.open(filename, ios::out | ios::trunc | ios::binary);
 		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
-		ofile.write((char*)data, width*height*pixelDepth / 8);
+		ofile.write((char*)data, width * height * pixelDepth / 8);
 		ofile.close();
 	}
 
@@ -928,13 +1329,13 @@ namespace NE {
 
 	size_t MAP::DecompressMask(void* in, void* out)
 	{
-		uint8_t *op;
-		uint8_t *ip;
+		uint8_t* op;
+		uint8_t* ip;
 		unsigned t;
-		uint8_t *m_pos;
+		uint8_t* m_pos;
 
-		op = (uint8_t *)out;
-		ip = (uint8_t *)in;
+		op = (uint8_t*)out;
+		ip = (uint8_t*)in;
 
 		if (*ip > 17) {
 			t = *ip++ - 17;
@@ -955,14 +1356,14 @@ namespace NE {
 				t += 15 + *ip++;
 			}
 
-			*(unsigned *)op = *(unsigned *)ip;
+			*(unsigned*)op = *(unsigned*)ip;
 			op += 4; ip += 4;
 			if (--t > 0)
 			{
 				if (t >= 4)
 				{
 					do {
-						*(unsigned *)op = *(unsigned *)ip;
+						*(unsigned*)op = *(unsigned*)ip;
 						op += 4; ip += 4; t -= 4;
 					} while (t >= 4);
 					if (t > 0) do *op++ = *ip++; while (--t > 0);
@@ -1010,7 +1411,7 @@ namespace NE {
 					}
 
 					m_pos = op - 1;
-					m_pos -= (*(unsigned short *)ip) >> 2;
+					m_pos -= (*(unsigned short*)ip) >> 2;
 					ip += 2;
 				}
 				else if (t >= 16) {
@@ -1024,7 +1425,7 @@ namespace NE {
 						}
 						t += 7 + *ip++;
 					}
-					m_pos -= (*(unsigned short *)ip) >> 2;
+					m_pos -= (*(unsigned short*)ip) >> 2;
 					ip += 2;
 					if (m_pos == op)
 						goto eof_found;
@@ -1039,10 +1440,10 @@ namespace NE {
 				}
 
 				if (t >= 6 && (op - m_pos) >= 4) {
-					*(unsigned *)op = *(unsigned *)m_pos;
+					*(unsigned*)op = *(unsigned*)m_pos;
 					op += 4; m_pos += 4; t -= 2;
 					do {
-						*(unsigned *)op = *(unsigned *)m_pos;
+						*(unsigned*)op = *(unsigned*)m_pos;
 						op += 4; m_pos += 4; t -= 4;
 					} while (t >= 4);
 					if (t > 0) do *op++ = *m_pos++; while (--t > 0);
@@ -1343,9 +1744,9 @@ namespace NE {
 		{
 			for (uint32_t w = 0; w < maskInfo.Width; w++)
 			{
-				int mask_index = (h * align_width + w) * 2;		
-				uint8_t mask_value = pMaskDataDec[mask_index / 8];	
-				mask_value = (mask_value >> (mask_index % 8));	
+				int mask_index = (h * align_width + w) * 2;
+				uint8_t mask_value = pMaskDataDec[mask_index / 8];
+				mask_value = (mask_value >> (mask_index % 8));
 				if ((mask_value & 3) == 3) {
 					// int bmpIndex_y = (maskInfo.StartY+h)*m_MapWidth * 3;
 					// int bmpIndex_x = (maskInfo.StartX+w) * 3;
@@ -1354,11 +1755,11 @@ namespace NE {
 					//uint8_t g = m_MapPixelsRGB24[bmpIndex + 1];
 					//uint8_t b  = m_MapPixelsRGB24[bmpIndex + 2];
 					//pOutMaskBmp[h*maskInfo.Width + w] = ( 0x80 << 24 )| (b<< 16)| (g << 8 )| r ;
-					maskInfo.Data[h*maskInfo.Width + w] = (0x80 << 24);
+					maskInfo.Data[h * maskInfo.Width + w] = (0x80 << 24);
 				}
 				else {
 					//pOutMaskBmp[h*maskInfo.Width + w] = ( 0x00 << 24 )| (b<< 16)| (g << 8 )| r ;
-					maskInfo.Data[h*maskInfo.Width + w] = (0x00 << 24);
+					maskInfo.Data[h * maskInfo.Width + w] = (0x00 << 24);
 				}
 			}
 		}
@@ -1374,8 +1775,8 @@ namespace NE {
 		int mat_row, mat_col;
 		int row = m_RowCount;
 		int col = m_ColCount;
-		cells = new int*[row*col];
-		for (int i = 0; i < row*col; i++) {
+		cells = new int* [row * col];
+		for (int i = 0; i < row * col; i++) {
 			cells[i] = new int[192];
 		}
 
@@ -1384,22 +1785,22 @@ namespace NE {
 
 		//printf("%d %d \n", mat_row, mat_col);
 
-		mat = new int*[row * 12];
+		mat = new int* [row * 12];
 		for (int i = 0; i < row * 12; i++) {
 			mat[i] = new int[16 * col];
 		}
 
 		for (int i = 0; i < row; i++) {
 			for (int j = 0; j < col; j++) {
-				ReadUnit(i*col + j);
+				ReadUnit(i * col + j);
 				for (int k = 0; k < 192; k++) {
-					cells[i*col + j][k] = (m_MapUnits)[i*col + j].Cell[k];
+					cells[i * col + j][k] = (m_MapUnits)[i * col + j].Cell[k];
 				}
 				int startMat_i = i * 12;
 				int startMat_j = j * 16;
 				for (int p = 0; p < 12; p++) {
 					for (int q = 0; q < 16; q++) {
-						mat[startMat_i + p][startMat_j + q] = cells[i*col + j][p * 16 + q];
+						mat[startMat_i + p][startMat_j + q] = cells[i * col + j][p * 16 + q];
 					}
 				}
 			}

@@ -112,15 +112,22 @@ namespace NE {
 
 		WAS(std::string path, uint32_t offset);
 
+		void Decode();
+
 		~WAS();
 
 		Header mHeader;
 
-		uint32_t mPalette32[256];
 
 		std::vector<uint32_t> mFrameIndecies;
 
 		std::string mPath;
+
+		std::vector<uint8_t> m_FileData;
+		std::uint64_t m_FileSize;
+		uint32_t m_FileOffset = 0;
+		uint16_t m_Palette16[256];
+		uint32_t m_Palette32[256];
 	};
 
 	
@@ -192,9 +199,9 @@ namespace NE {
 		std::map<uint32_t, uint32_t> mIdToPos;
 
 		uint16_t m_Palette16[256];
+		uint32_t m_Palette32[256];
 		std::string m_Path;
 		std::string m_WDFDir;
-		uint32_t m_Palette32[256];
 		std::string m_FileName;
 		uint32_t m_FileDataOffset;
 		uint32_t m_WASNumber;
