@@ -125,7 +125,7 @@ namespace NE {
 
 		std::vector<uint8_t> m_FileData;
 		std::uint64_t m_FileSize;
-		uint32_t m_FileOffset = 0;
+		size_t m_FileOffset = 0;
 		uint16_t m_Palette16[256];
 		uint32_t m_Palette32[256];
 	};
@@ -169,7 +169,7 @@ namespace NE {
 		WAS GetWAS(uint32_t id);
 		void SaveWAS(uint32_t id, const char* path);
 
-		Sprite* LoadSprite(uint32_t id, std::vector<PalSchemePart>* patMatrix = nullptr);
+		Sprite* LoadSprite(uint32_t id, std::vector<PalSchemePart>* patMatrix =nullptr );
 		void UnLoadSprite(uint32_t id);
 
 		Sprite* LoadSpriteHeader(uint32_t id, std::vector<PalSchemePart>* patMatrix = nullptr);
@@ -334,7 +334,7 @@ namespace NE {
 
 		bool ReadCELL(uint32_t& offset, uint32_t size, uint32_t index);
 
-		bool ReadBRIG(uint32_t& offset, uint32_t size, uint32_t index);
+		bool ReadBRIG(uint32_t& offset, uint32_t size);
 
 
 		std::string m_FileName;
