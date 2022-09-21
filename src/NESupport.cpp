@@ -619,43 +619,22 @@ namespace NE {
 	void Sprite::SaveImage(const char* filename, int index)
 	{
 		Sequence& sq = Frames[index];
-
-		TGA_FILE_HEADER TgaHeader;
-		memset(&TgaHeader, 0, 18);
-
-		TgaHeader.IdLength = 0;
-		TgaHeader.ColorMapType = 0;
-		TgaHeader.ImageType = 0x02;
-		TgaHeader.ColorMapFirstIndex = 0;
-		TgaHeader.ColorMapLength = 0;
-		TgaHeader.ColorMapEntrySize = 0;
-		TgaHeader.XOrigin = 0;
-		TgaHeader.YOrigin = 0;
-		TgaHeader.ImageWidth = (uint16_t)sq.Width;
-		TgaHeader.ImageHeight = (uint16_t)sq.Height;
-		TgaHeader.PixelDepth = 24;
-		TgaHeader.ImageDescruptor = 8;
-		std::ofstream ofile(filename, std::ios::out | std::ios::trunc | std::ios::binary);
-		if (!ofile)return;
-
-		uint8_t* img_data = new uint8_t[sq.Src.size() * 3];
+		uint8_t* img_data = new uint8_t[Width * Height * 4]{ 0 };
 		for (int row = 0; row < sq.Height; row++) {
 			for (int col = 0; col < sq.Width; col++) {
 				int fliprow = sq.Height - 1 - row;
 				int i = fliprow * sq.Width + col;
+
 				int datai = row * sq.Width + col;
 				uint32_t pix = sq.Src[i];
 				img_data[datai * 3] = (uint8_t)((pix & 0xff0000) >> 16);
 				img_data[datai * 3 + 1] = (uint8_t)((pix & 0xff00) >> 8);
 				img_data[datai * 3 + 2] = (uint8_t)(pix & 0xff);
+				img_data[datai * 3 + 3] = 0xff;
 			}
 		}
-
-		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
-		ofile.write((char*)img_data, sq.Src.size() * 3);
+		UtilsSaveImageFile(filename, Width, Height, 32, (char*)img_data);
 		delete[] img_data;
-		img_data = nullptr;
-		ofile.close();
 	}
 
 	WAS::WAS(std::string filename)
