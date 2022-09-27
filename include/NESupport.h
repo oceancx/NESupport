@@ -11,12 +11,12 @@ namespace NE {
 
 	enum EFileType
 	{
-		FILE_TYPE_UNKNOWN = 0,
-		FILE_TYPE_SPRITE,
-		FILE_TYPE_OGGS,
-		FILE_TYPE_MP3,
-		FILE_TYPE_RIFF,
-		FILE_TYPE_TEXT
+		eFILE_TYPE_UNKNOWN = 0,
+		eFILE_TYPE_SPRITE,
+		eFILE_TYPE_OGGS,
+		eFILE_TYPE_MP3,
+		eFILE_TYPE_RIFF,
+		eFILE_TYPE_TEXT
 	};
 
 	using PalMat = std::vector<uint16_t>;

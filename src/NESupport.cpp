@@ -459,21 +459,21 @@ namespace NE {
 		memcpy((char*)&flag, data, 4);
 		if (flag == 'SggO') {
 			//printf("read oggs file\n");
-			return FILE_TYPE_OGGS;
+			return eFILE_TYPE_OGGS;
 		}
 		else if (flag == 'FFIR') {
 			//printf("read wav file\n");
-			return FILE_TYPE_RIFF;
+			return eFILE_TYPE_RIFF;
 		}
 		else if ((flag & 0xffff) == 'PS')
 		{
 			//printf("read sp file\n");
-			return FILE_TYPE_SPRITE;
+			return eFILE_TYPE_SPRITE;
 		}
 		else {
 			if (predict_text) {
 				//printf("read txt file\n");
-				return FILE_TYPE_TEXT;
+				return eFILE_TYPE_TEXT;
 			}
 			else {
 				Map3FrameHeader header;
@@ -481,11 +481,11 @@ namespace NE {
 				MEM_COPY_WITH_OFF(off, &header, data, sizeof(header));
 				if (header.sync1 == 0xff && header.sync2 == 0x7) {
 					//printf("read map3 file\n");
-					return FILE_TYPE_MP3;
+					return eFILE_TYPE_MP3;
 				}
 				else {
 					//printf("read unknown file\n");
-					return FILE_TYPE_UNKNOWN;
+					return eFILE_TYPE_UNKNOWN;
 				}
 			}
 		}
@@ -1053,7 +1053,7 @@ namespace NE {
 		Index index = mIndencies[mIdToPos[id]];
 		char* data = (char*)(m_FileData.data() + index.offset);
 		size_t offset = 0;
-		assert(check_file_type(data, index.size) == FILE_TYPE_SPRITE);
+		assert(check_file_type(data, index.size) == eFILE_TYPE_SPRITE);
 
 		WAS::Header header;
 		MEM_COPY_WITH_OFF(offset, &header, data, sizeof(header));
