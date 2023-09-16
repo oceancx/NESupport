@@ -302,6 +302,9 @@ namespace NE {
 
 		void SaveImageFile(const char* filename, int width, int height, int pixelDepth, char* data);
 
+		int Width() { return m_Width; };
+		int Height() { return m_Height; };
+
 		int MapWidth() { return m_MapWidth; };
 		int MapHeight() { return m_MapHeight; };
 		int SliceWidth() { return m_Width; };

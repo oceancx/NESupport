@@ -103,6 +103,30 @@ struct TGA_FILE_HEADER
 
 namespace NE {
 
+	void UtilsSaveImageFile(const char* filename, int width, int height, int pixelDepth, char* data)
+	{
+		TGA_FILE_HEADER TgaHeader;
+		memset(&TgaHeader, 0, 18);
+		TgaHeader.IdLength = 0;
+		TgaHeader.ColorMapType = 0;
+		TgaHeader.ImageType = 0x02;
+		TgaHeader.ColorMapFirstIndex = 0;
+		TgaHeader.ColorMapLength = 0;
+		TgaHeader.ColorMapEntrySize = 0;
+		TgaHeader.XOrigin = 0;
+		TgaHeader.YOrigin = 0;
+		TgaHeader.ImageWidth = (uint16_t)width;
+		TgaHeader.ImageHeight = (uint16_t)height;
+		TgaHeader.PixelDepth = (uint8_t)pixelDepth;
+		TgaHeader.ImageDescruptor = 8;
+
+		std::fstream ofile;
+		ofile.open(filename, ios::out | ios::trunc | ios::binary);
+		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
+		ofile.write((char*)data, width * height * pixelDepth / 8);
+		ofile.close();
+	}
+
 
 	bool SaveBitmap(std::string path, const BitmapFile& file)
 	{
@@ -427,30 +451,6 @@ namespace NE {
 		}
 	}
 
-
-	void UtilsSaveImageFile(const char* filename, int width, int height, int pixelDepth, char* data)
-	{
-		TGA_FILE_HEADER TgaHeader;
-		memset(&TgaHeader, 0, 18);
-		TgaHeader.IdLength = 0;
-		TgaHeader.ColorMapType = 0;
-		TgaHeader.ImageType = 0x02;
-		TgaHeader.ColorMapFirstIndex = 0;
-		TgaHeader.ColorMapLength = 0;
-		TgaHeader.ColorMapEntrySize = 0;
-		TgaHeader.XOrigin = 0;
-		TgaHeader.YOrigin = 0;
-		TgaHeader.ImageWidth = (uint16_t)width;
-		TgaHeader.ImageHeight = (uint16_t)height;
-		TgaHeader.PixelDepth = (uint8_t)pixelDepth;
-		TgaHeader.ImageDescruptor = 8;
-
-		std::fstream ofile;
-		ofile.open(filename, ios::out | ios::trunc | ios::binary);
-		ofile.write((char*)(&TgaHeader), sizeof(TGA_FILE_HEADER));
-		ofile.write((char*)data, width * height * pixelDepth / 8);
-		ofile.close();
-	}
 
 	int check_file_type(char* data, size_t size)
 	{
@@ -893,7 +893,7 @@ namespace NE {
 
 	Sprite* WDF::LoadSpriteHeader(uint32_t id, std::vector<PalSchemePart>* patMatrix )
 	{
-		if (patMatrix == nullptr)return nullptr;
+		//if (patMatrix == nullptr)return nullptr;
 		auto it = m_Sprites.find(id);
 		if (it != m_Sprites.end())
 		{
@@ -1047,9 +1047,10 @@ namespace NE {
 		LoadSpriteData(sprite, patMatrix);
 		return sprite;
 	}
-
+	// used to export bmp
 	Sprite* WDF::UnpackSprite(uint32_t id, std::vector<PalSchemePart> pal)
 	{
+		if (mIdToPos.find(id) == mIdToPos.end())return nullptr;
 		Index index = mIndencies[mIdToPos[id]];
 		char* data = (char*)(m_FileData.data() + index.offset);
 		size_t offset = 0;
@@ -1083,7 +1084,6 @@ namespace NE {
 				}
 			}
 		}
-
 		
 		for (int k = 0; k < 256; k++)
 		{
@@ -1126,11 +1126,19 @@ namespace NE {
 			bool copyLine = true;
 			for (int j = 0; j < fHeight; j++)
 			{
+				int pj = fHeight - 1 - j;
 				uint32_t lineDataPos = frameLine[j];
 				offset = frame_off + lineDataPos;
-				pBmpStart = bitmap.data() + fWidth * (j);
+				pBmpStart = bitmap.data() + fWidth * pj;
 				int pixelLen = fWidth;
 				SpriteDataHandler((uint8_t*)(data + offset), pBmpStart, 0, pixelLen, j, copyLine, m_Palette16, m_Palette32);
+
+				// exchange r and b
+				for (int x = 0; x < fWidth; x++) {
+					uint32_t pix = bitmap[fWidth * pj + x];
+					uint8_t* p = (uint8_t*)&pix;
+					bitmap[fWidth * pj + x] = p[3] << 24 | p[0] << 16 | p[1] << 8 | p[2];
+				}
 			}
 
 			if (copyLine)
@@ -1727,18 +1735,10 @@ namespace NE {
 				uint8_t mask_value = pMaskDataDec[mask_index / 8];
 				mask_value = (mask_value >> (mask_index % 8));
 				if ((mask_value & 3) == 3) {
-					// int bmpIndex_y = (maskInfo.StartY+h)*m_MapWidth * 3;
-					// int bmpIndex_x = (maskInfo.StartX+w) * 3;
-					// int bmpIndex = bmpIndex_y + bmpIndex_x;
-					//uint8_t r = m_MapPixelsRGB24[bmpIndex];
-					//uint8_t g = m_MapPixelsRGB24[bmpIndex + 1];
-					//uint8_t b  = m_MapPixelsRGB24[bmpIndex + 2];
-					//pOutMaskBmp[h*maskInfo.Width + w] = ( 0x80 << 24 )| (b<< 16)| (g << 8 )| r ;
-					maskInfo.Data[h * maskInfo.Width + w] = (uint32_t)(0x80 << 24);
+					maskInfo.Data[(maskInfo.Height - 1 - h) * maskInfo.Width + w] = (uint32_t)(0x80 << 24);
 				}
 				else {
-					//pOutMaskBmp[h*maskInfo.Width + w] = ( 0x00 << 24 )| (b<< 16)| (g << 8 )| r ;
-					maskInfo.Data[h * maskInfo.Width + w] = (uint32_t)(0x00 << 24);
+					maskInfo.Data[(maskInfo.Height - 1 - h) * maskInfo.Width + w] = (uint32_t)(0x00 << 24);
 				}
 			}
 		}
