@@ -1126,20 +1126,30 @@ namespace NE {
 			bool copyLine = true;
 			for (int j = 0; j < fHeight; j++)
 			{
-				int pj = fHeight - 1 - j;
 				uint32_t lineDataPos = frameLine[j];
 				offset = frame_off + lineDataPos;
-				pBmpStart = bitmap.data() + fWidth * pj;
+				pBmpStart = bitmap.data() + fWidth * (j);
 				int pixelLen = fWidth;
 				SpriteDataHandler((uint8_t*)(data + offset), pBmpStart, 0, pixelLen, j, copyLine, m_Palette16, m_Palette32);
-
-				// exchange r and b
-				for (int x = 0; x < fWidth; x++) {
-					uint32_t pix = bitmap[fWidth * pj + x];
-					uint8_t* p = (uint8_t*)&pix;
-					bitmap[fWidth * pj + x] = p[3] << 24 | p[0] << 16 | p[1] << 8 | p[2];
-				}
 			}
+			
+			// export file use this code block
+			// for (int j = 0; j < fHeight; j++)
+			// {
+			// 	int pj = fHeight - 1 - j;
+			// 	uint32_t lineDataPos = frameLine[j];
+			// 	offset = frame_off + lineDataPos;
+			// 	pBmpStart = bitmap.data() + fWidth * pj;
+			// 	int pixelLen = fWidth;
+			// 	SpriteDataHandler((uint8_t*)(data + offset), pBmpStart, 0, pixelLen, j, copyLine, m_Palette16, m_Palette32);
+
+			// 	// exchange r and b
+			// 	for (int x = 0; x < fWidth; x++) {
+			// 		uint32_t pix = bitmap[fWidth * pj + x];
+			// 		uint8_t* p = (uint8_t*)&pix;
+			// 		bitmap[fWidth * pj + x] = p[3] << 24 | p[0] << 16 | p[1] << 8 | p[2];
+			// 	}
+			// }
 
 			if (copyLine)
 			{
